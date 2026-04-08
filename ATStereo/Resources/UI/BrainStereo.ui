@@ -179,7 +179,7 @@ QFrame {
       <item>
        <widget class="QGroupBox" name="FrameModelBox">
         <property name="title">
-         <string>Frame (200 × 120 × 120 mm)</string>
+         <string>Frame (200 × 200 × 200 mm)</string>
         </property>
         <layout class="QGridLayout" name="frameGrid">
          <item row="0" column="0">
@@ -206,7 +206,7 @@ QFrame {
          <item row="0" column="3">
           <widget class="QLineEdit" name="heightEdit">
            <property name="text">
-            <string>120</string>
+            <string>200</string>
            </property>
           </widget>
          </item>
@@ -220,7 +220,7 @@ QFrame {
          <item row="0" column="5">
           <widget class="QLineEdit" name="depthEdit">
            <property name="text">
-            <string>120</string>
+            <string>200</string>
            </property>
           </widget>
          </item>
@@ -245,7 +245,7 @@ QFrame {
          <item row="0" column="1">
           <widget class="QLineEdit" name="supportLengthEdit">
            <property name="text">
-            <string>100</string>
+            <string>200</string>
            </property>
            <property name="readOnly">
             <bool>true</bool>
@@ -262,7 +262,7 @@ QFrame {
          <item row="0" column="3">
           <widget class="QLineEdit" name="sliderTravelEdit">
            <property name="text">
-            <string>100</string>
+            <string>200</string>
            </property>
            <property name="readOnly">
             <bool>true</bool>
@@ -865,134 +865,139 @@ QFrame {
           </layout>
          </item>
 
-         <item row="1" column="0">
-          <layout class="QGridLayout" name="gridLayout_3">
-           <item row="0" column="0">
-            <widget class="qMRMLLinearTransformSlider" name="axTransSlicer">
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="singleStep">
-              <double>0.100000000000000</double>
-             </property>
-             <property name="pageStep">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="minimum">
-              <double>0.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>200.000000000000000</double>
-             </property>
-             <property name="value">
-              <double>0.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1">
-            <widget class="QLabel" name="label_3">
-             <property name="minimumSize">
-              <size>
-               <width>60</width>
-               <height>0</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>Local X</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-
-           <item row="1" column="0">
-            <widget class="qMRMLLinearTransformSlider" name="ayTransSlicer">
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="singleStep">
-              <double>0.100000000000000</double>
-             </property>
-             <property name="pageStep">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="minimum">
-              <double>0.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>100.000000000000000</double>
-             </property>
-             <property name="value">
-              <double>0.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="1" column="1">
-            <widget class="QLabel" name="label_4">
-             <property name="minimumSize">
-              <size>
-               <width>60</width>
-               <height>0</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>Slider</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-
-           <item row="2" column="0">
-            <widget class="qMRMLLinearTransformSlider" name="azTransSlicer">
-             <property name="decimals">
-              <number>1</number>
-             </property>
-             <property name="singleStep">
-              <double>0.100000000000000</double>
-             </property>
-             <property name="pageStep">
-              <double>1.000000000000000</double>
-             </property>
-             <property name="minimum">
-              <double>0.000000000000000</double>
-             </property>
-             <property name="maximum">
-              <double>120.000000000000000</double>
-             </property>
-             <property name="value">
-              <double>0.000000000000000</double>
-             </property>
-            </widget>
-           </item>
-           <item row="2" column="1">
-            <widget class="QLabel" name="label_5">
-             <property name="minimumSize">
-              <size>
-               <width>60</width>
-               <height>0</height>
-              </size>
-             </property>
-             <property name="text">
-              <string>Local Z</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-
          <!-- Left Side Controls -->
-         <item row="2" column="0">
+         <item row="1" column="0">
           <widget class="QGroupBox" name="leftVisBox">
            <property name="title">
             <string>Left Side</string>
            </property>
            <layout class="QVBoxLayout" name="leftVisLayout">
+            <item>
+             <layout class="QHBoxLayout" name="leftLocalXLayout">
+              <item>
+               <widget class="ctkSliderWidget" name="leftLocalXSlicer">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="pageStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>100.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_left_localx">
+                <property name="minimumSize">
+                 <size>
+                  <width>70</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Local X</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="leftLocalYLayout">
+              <item>
+               <widget class="ctkSliderWidget" name="leftLocalYSlicer">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="pageStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>200.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_left_localy">
+                <property name="minimumSize">
+                 <size>
+                  <width>70</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Local Y</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="leftLocalZLayout">
+              <item>
+               <widget class="ctkSliderWidget" name="leftLocalZSlicer">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="pageStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>200.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_left_localz">
+                <property name="minimumSize">
+                 <size>
+                  <width>70</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Local Z</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
             <item>
              <layout class="QHBoxLayout" name="leftArcLayout">
               <item>
@@ -1085,12 +1090,138 @@ QFrame {
          </item>
 
          <!-- Right Side Controls -->
-         <item row="3" column="0">
+         <item row="2" column="0">
           <widget class="QGroupBox" name="rightVisBox">
            <property name="title">
             <string>Right Side</string>
            </property>
            <layout class="QVBoxLayout" name="rightVisLayout">
+            <item>
+             <layout class="QHBoxLayout" name="rightLocalXLayout">
+              <item>
+               <widget class="ctkSliderWidget" name="rightLocalXSlicer">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="pageStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>100.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_right_localx">
+                <property name="minimumSize">
+                 <size>
+                  <width>70</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Local X</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="rightLocalYLayout">
+              <item>
+               <widget class="ctkSliderWidget" name="rightLocalYSlicer">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="pageStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>200.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_right_localy">
+                <property name="minimumSize">
+                 <size>
+                  <width>70</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Local Y</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="rightLocalZLayout">
+              <item>
+               <widget class="ctkSliderWidget" name="rightLocalZSlicer">
+                <property name="decimals">
+                 <number>1</number>
+                </property>
+                <property name="singleStep">
+                 <double>0.100000000000000</double>
+                </property>
+                <property name="pageStep">
+                 <double>1.000000000000000</double>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>200.000000000000000</double>
+                </property>
+                <property name="value">
+                 <double>0.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_right_localz">
+                <property name="minimumSize">
+                 <size>
+                  <width>70</width>
+                  <height>0</height>
+                 </size>
+                </property>
+                <property name="text">
+                 <string>Local Z</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
             <item>
              <layout class="QHBoxLayout" name="rightArcLayout">
               <item>

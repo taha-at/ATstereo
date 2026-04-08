@@ -49,10 +49,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.leftRingSlicer.valueChanged.connect(lambda: self.ringRotateSide("left"))
     self.ui.rightArcSlicer.valueChanged.connect(lambda: self.pRotateSide("right"))
     self.ui.rightRingSlicer.valueChanged.connect(lambda: self.ringRotateSide("right"))
-    self.ui.axTransSlicer.valueChanged.connect(self.axyzRotateBoth)
-    self.ui.ayTransSlicer.valueChanged.connect(self.axyzRotateBoth)
-    self.ui.azTransSlicer.valueChanged.connect(self.axyzRotateBoth)
-
+    self.ui.leftLocalXSlicer.valueChanged.connect(lambda: self.slider_transform("left"))
+    self.ui.leftLocalYSlicer.valueChanged.connect(lambda: self.slider_transform("left"))
+    self.ui.leftLocalZSlicer.valueChanged.connect(lambda: self.slider_transform("left"))
+    self.ui.rightLocalXSlicer.valueChanged.connect(lambda: self.slider_transform("right"))
+    self.ui.rightLocalYSlicer.valueChanged.connect(lambda: self.slider_transform("right"))
+    self.ui.rightLocalZSlicer.valueChanged.connect(lambda: self.slider_transform("right"))  
     self.ui.visualizePlanBtn.connect('clicked(bool)', self.loadFrame)
     self.ui.visualizeFrameBtn.connect('clicked(bool)', self.visualFrame)
     self.ui.lockPlanBtn.connect('clicked(bool)', self.lockPlan)
@@ -729,8 +731,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.leftSlider.setText("0")
     self.ui.rightSlider.setText("0")
-    self.ui.depthEdit.setText("120")
+    self.ui.depthEdit.setText("200")
     self.defineiVar()
+
 
 #######################################################################################  For Simulation
   def loadFrame(self):
@@ -849,23 +852,19 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if side == "left":
         ring_value = self.ui.leftRingSlicer.value
     else:
-        ring_value = -self.ui.rightRingSlicer.value
+        ring_value = self.ui.rightRingSlicer.value
 
     px, py, pz = plan["isocenter"]
     if side == "left":
-        px -= 190
+        px -= 200
     else:
-        px += 190
+        px += 200
 
     arcTransform = vtk.vtkTransform()
     arcTransform.Translate(px, py, pz)
     arcTransform.RotateX(ring_value)
     arcTransform.Translate(-px, -py, -pz)
     plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
-
-  def axyzRotateBoth(self):
-    self.axyzRotateSide("left")
-    self.axyzRotateSide("right")
 
   def axyzRotateSide(self, side):
     plan = self.plans[side]
@@ -875,9 +874,14 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if plan["basePosition"] is None:
         return
 
-    x = self.ui.axTransSlicer.value
-    y = self.ui.ayTransSlicer.value
-    z = self.ui.azTransSlicer.value
+    if side == "left":
+        x = self.ui.leftLocalXSlicer.value
+        y = self.ui.leftLocalYSlicer.value
+        z = self.ui.leftLocalZSlicer.value
+    else:
+        x = self.ui.rightLocalXSlicer.value
+        y = self.ui.rightLocalYSlicer.value
+        z = self.ui.rightLocalZSlicer.value
 
     gx, gy, gz = self.localToGlobal(side, x, y, z)
     baseX, baseY, baseZ = plan["basePosition"]
@@ -886,6 +890,43 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     sliderTransform.Translate(0, gy - baseY, 0)
     plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
 
+
+  def slider_transform(self, side):
+    plan = self.plans[side]
+    if plan["sliderTranNode"] is None or plan["supportTranNode"] is None:
+        return
+
+    if side == "left":
+        x = self.ui.leftLocalXSlicer.value
+        y = self.ui.leftLocalYSlicer.value
+        z = self.ui.leftLocalZSlicer.value
+    else:
+        x = self.ui.rightLocalXSlicer.value
+        y = self.ui.rightLocalYSlicer.value
+        z = self.ui.rightLocalZSlicer.value
+
+    supportTransform = vtk.vtkTransform()
+    supportTransform.Translate(0.0, 0.0, -z)
+    #self.updateIsocenter(side, 0, 0, -z)
+    plan["supportTranNode"].SetMatrixTransformToParent(supportTransform.GetMatrix())
+    
+    arcTransform = vtk.vtkTransform()
+    if side == "left":
+        arcTransform.Translate(x, 0.0, 0.0)
+        #self.updateIsocenter("left", x, 0, 0)
+    else:
+        arcTransform.Translate(-x, 0.0, 0.0)
+        #self.updateIsocenter("right", -x, 0, 0)
+    
+    plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
+
+    # Update slider transform (Y local axis)
+    slider_y = max(0.0, min(200.0, y))
+    sliderTransform = vtk.vtkTransform()
+    sliderTransform.Translate(0.0, slider_y, 0.0)
+    #self.updateIsocenter(side, 0, slider_y, 0)
+    plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
+    
   def applyPlanTransform(self, side):
     plan = self.plans[side]
     result = plan["result"]
@@ -922,13 +963,13 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if side == "left":
         ring_value = ring
     else:
-        ring_value = -ring
+        ring_value = ring
     px, py, pz = plan["isocenter"]
     if side == "left":
-        px -= 190
+        px -= 200
 
     else:
-        px += 190
+        px += 200
 
     arcTransform = vtk.vtkTransform()
     arcTransform.Translate(px, py, pz)
@@ -947,6 +988,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # path: identity — follows box as child in hierarchy
     pathTransform = vtk.vtkTransform()
     plan["pathTranNode"].SetMatrixTransformToParent(pathTransform.GetMatrix())
+
+    # Apply manual slider adjustments on top or refresh UI state
+    self.slider_transform(side)
 
     
   def visualFrame(self):
