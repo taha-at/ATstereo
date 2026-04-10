@@ -851,8 +851,10 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     if side == "left":
         ring_value = self.ui.leftRingSlicer.value
+        x = self.ui.leftLocalXSlicer.value
     else:
         ring_value = self.ui.rightRingSlicer.value
+        x = self.ui.rightLocalXSlicer.value
 
     px, py, pz = plan["isocenter"]
     if side == "left":
@@ -861,6 +863,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         px += 200
 
     arcTransform = vtk.vtkTransform()
+    if side == "left":
+        arcTransform.Translate(x, 0.0, 0.0)
+    else:
+        arcTransform.Translate(-x, 0.0, 0.0)
+
     arcTransform.Translate(px, py, pz)
     arcTransform.RotateX(ring_value)
     arcTransform.Translate(-px, -py, -pz)
@@ -900,31 +907,38 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         x = self.ui.leftLocalXSlicer.value
         y = self.ui.leftLocalYSlicer.value
         z = self.ui.leftLocalZSlicer.value
+        ring_value = self.ui.leftRingSlicer.value
     else:
         x = self.ui.rightLocalXSlicer.value
         y = self.ui.rightLocalYSlicer.value
         z = self.ui.rightLocalZSlicer.value
+        ring_value = self.ui.rightRingSlicer.value
 
     supportTransform = vtk.vtkTransform()
     supportTransform.Translate(0.0, 0.0, -z)
-    #self.updateIsocenter(side, 0, 0, -z)
     plan["supportTranNode"].SetMatrixTransformToParent(supportTransform.GetMatrix())
-    
+
     arcTransform = vtk.vtkTransform()
     if side == "left":
         arcTransform.Translate(x, 0.0, 0.0)
-        #self.updateIsocenter("left", x, 0, 0)
     else:
         arcTransform.Translate(-x, 0.0, 0.0)
-        #self.updateIsocenter("right", -x, 0, 0)
+        
+    px, py, pz = plan["isocenter"]
+    if side == "left":
+        px -= 200
+    else:
+        px += 200
+        
+    arcTransform.Translate(px, py, pz)
+    arcTransform.RotateX(ring_value)
+    arcTransform.Translate(-px, -py, -pz)
     
     plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
-
     # Update slider transform (Y local axis)
     slider_y = max(0.0, min(200.0, y))
     sliderTransform = vtk.vtkTransform()
     sliderTransform.Translate(0.0, slider_y, 0.0)
-    #self.updateIsocenter(side, 0, slider_y, 0)
     plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
     
   def applyPlanTransform(self, side):
@@ -959,7 +973,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     sliderTransform.Translate(0.0, slider, 0.0)
     plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
 
-    # arc: ring rotation with pivot at slider attachment
+    # arc: ring rotation with pivot at slider attachment AND sliding along X
     if side == "left":
         ring_value = ring
     else:
@@ -972,6 +986,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         px += 200
 
     arcTransform = vtk.vtkTransform()
+    if side == "left":
+        arcTransform.Translate(x, 0.0, 0.0)
+    else:
+        arcTransform.Translate(-x, 0.0, 0.0)
+
     arcTransform.Translate(px, py, pz)
     arcTransform.RotateX(ring_value)
     arcTransform.Translate(-px, -py, -pz)
