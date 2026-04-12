@@ -13,9 +13,9 @@ class ATStereo(ScriptedLoadableModule):
     self.parent.title = "ATStereo"  # TODO: make this more human readable by adding spaces
     self.parent.categories = ["Neurosurgery"] 
     self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["xmszj"]  # TODO: replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["HackerOne"]  # TODO: replace with "Firstname Lastname (Organization)"
     # TODO: update with short description of the module and a link to online module documentation
-    self.parent.helpText = """https://github.com/xmszj/BrainStereo"""
+    self.parent.helpText = """https://github.com/Hacker1one/ATstereo"""
     # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """Thanks for 3DSlicer Forum """
 
@@ -29,7 +29,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def setup(self):
     ScriptedLoadableModuleWidget.setup(self)
 
-    uiWidget = slicer.util.loadUI(self.resourcePath('UI/BrainStereo.ui'))
+    uiWidget = slicer.util.loadUI(self.resourcePath('UI/ATStereo.ui'))
     self.layout.addWidget(uiWidget)
     self.ui = slicer.util.childWidgetVariables(uiWidget)
     uiWidget.setMRMLScene(slicer.mrmlScene)
@@ -73,13 +73,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.defineiVar()
 
-    # self.leksellLib = ctypes.CDLL(slicer.util.loadUI(self.resourcePath('pythonDll.dll')))
-    # lib.calculate_xyz lib.calculate_arc  lib.calculate_ring
-
-
-    #shNode = slicer.mrmlScene.GetSubjectHierarchyNode()
-    #sceneItemID = shNode.GetSceneItemID()
-    #folderItemId = shNode.CreateFolderItem(sceneItemID , "BrainStereo")
 
     self.sc=stereoLogic()
     self.sc.initTube()
@@ -489,6 +482,24 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.leftSlider.setText(str(result["slider"]))
         self.ui.leftArc.setText(str(result["arc"]))
         self.ui.leftRing.setText(str(result["ring"]))
+
+        self.ui.leftLocalXSlicer.blockSignals(True)
+        self.ui.leftLocalYSlicer.blockSignals(True)
+        self.ui.leftLocalZSlicer.blockSignals(True)
+        self.ui.leftRingSlicer.blockSignals(True)
+        self.ui.leftArcSlicer.blockSignals(True)
+
+        self.ui.leftLocalXSlicer.value = result["x"]
+        self.ui.leftLocalYSlicer.value = result["y"]
+        self.ui.leftLocalZSlicer.value = result["z"]
+        self.ui.leftRingSlicer.value = result["ring"]
+        self.ui.leftArcSlicer.value = result["arc"]
+
+        self.ui.leftLocalXSlicer.blockSignals(False)
+        self.ui.leftLocalYSlicer.blockSignals(False)
+        self.ui.leftLocalZSlicer.blockSignals(False)
+        self.ui.leftRingSlicer.blockSignals(False)
+        self.ui.leftArcSlicer.blockSignals(False)
     else:
         self.ui.right_final_x.setText(str(result["x"]))
         self.ui.right_final_y.setText(str(result["y"]))
@@ -497,33 +508,57 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.rightArc.setText(str(result["arc"]))
         self.ui.rightRing.setText(str(result["ring"]))
 
+        self.ui.rightLocalXSlicer.blockSignals(True)
+        self.ui.rightLocalYSlicer.blockSignals(True)
+        self.ui.rightLocalZSlicer.blockSignals(True)
+        self.ui.rightRingSlicer.blockSignals(True)
+        self.ui.rightArcSlicer.blockSignals(True)
+
+        self.ui.rightLocalXSlicer.value = result["x"]
+        self.ui.rightLocalYSlicer.value = result["y"]
+        self.ui.rightLocalZSlicer.value = result["z"]
+        self.ui.rightRingSlicer.value = result["ring"]
+        self.ui.rightArcSlicer.value = result["arc"]
+
+        self.ui.rightLocalXSlicer.blockSignals(False)
+        self.ui.rightLocalYSlicer.blockSignals(False)
+        self.ui.rightLocalZSlicer.blockSignals(False)
+        self.ui.rightRingSlicer.blockSignals(False)
+        self.ui.rightArcSlicer.blockSignals(False)
+
   def computeDualArcResult(self, side, target_ras, entry_ras=None):
-    t = np.array([target_ras[0], target_ras[1], target_ras[2]], dtype=float)
+    iso = self.plans[side]["isocenter"]
 
-    print(f"[{side}] raw target_ras = {t}")
+    t = np.array([
+        target_ras[0] - iso[0],
+        target_ras[1] - iso[1],
+        target_ras[2] - iso[2]
+    ], dtype=float)
 
-    frame_x = t[0]
-    frame_y = t[1]
-    frame_z = t[2]
+    print(f"[{side}] raw target_ras = {target_ras}, translated t = {t}")
 
     if side == "left":
-        local_x = frame_x
+        local_x = -t[0]
     else:
-        local_x = 200.0 - frame_x
+        local_x = t[0]
 
-    local_y = frame_y
-    local_z = frame_z
+    local_y = t[1]
+    local_z = t[2]
 
     print(f"[{side}] preclamp local = ({local_x}, {local_y}, {local_z})")
 
-    local_x = max(0.0, min(200.0, local_x))
+    local_x = max(0.0, min(100.0, local_x))
     local_y = max(0.0, min(200.0, local_y))
     local_z = max(-200.0, min(200.0, local_z))
 
     slider = max(0.0, min(100.0, local_y))
 
     if entry_ras is not None:
-        e = np.array([entry_ras[0], entry_ras[1], entry_ras[2]], dtype=float)
+        e = np.array([
+            entry_ras[0] - iso[0],
+            entry_ras[1] - iso[1],
+            entry_ras[2] - iso[2]
+        ], dtype=float)
         # Direction vector from entry to target (Globocentric convention)
         a = [t[i] - e[i] for i in range(3)]
         A = math.sqrt(sum(v * v for v in a))
@@ -563,9 +598,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             if a[1] < 0:
                 ring = 90.0 + alpha_y
             else:
-                ring = 180.0 + alpha_y
+                ring = 270.0 - alpha_y
         else:
             ring = 0.0
+
+        if ring > 180.0:
+            ring -= 360.0
     else:
         arc = 30.0
         ring = 0.0
@@ -578,7 +616,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "z": round(local_z, 2),
         "slider": round(slider, 2),
         "arc": round(arc, 2),
-        "ring": round(ring, 2),
+        "ring": round(-ring, 2),
     }
 
 
