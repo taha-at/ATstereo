@@ -5,18 +5,14 @@ import math,functools
 import numpy as np
 from Resources.stereoLogic import stereoLogic
 import qt
-
 class ATStereo(ScriptedLoadableModule):
 
   def __init__(self, parent):
     ScriptedLoadableModule.__init__(self, parent)
-    self.parent.title = "ATStereo"  # TODO: make this more human readable by adding spaces
+    self.parent.title = "ATStereo" 
     self.parent.categories = ["Neurosurgery"] 
-    self.parent.dependencies = []  # TODO: add here list of module names that this module requires
-    self.parent.contributors = ["HackerOne"]  # TODO: replace with "Firstname Lastname (Organization)"
-    # TODO: update with short description of the module and a link to online module documentation
+    self.parent.contributors = ["HackerOne"]  
     self.parent.helpText = """https://github.com/Hacker1one/ATstereo"""
-    # TODO: replace with organization, grant and thanks
     self.parent.acknowledgementText = """Thanks for 3DSlicer Forum """
 
 class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
@@ -80,6 +76,15 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.track=track()
 
     #self.creatPlanTable()
+
+    # Setup 3D view mouse move observer for data probe
+    layoutManager = slicer.app.layoutManager()
+    threeDWidget = layoutManager.threeDWidget(0)
+    threeDView = threeDWidget.threeDView()
+    self.interactor = threeDView.interactorStyle().GetInteractor()
+    
+    
+    self.interactor.AddObserver('MouseMoveEvent', self.onMouseMove)
 
 
   def localToGlobal(self, side, x, y, z):
@@ -479,7 +484,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.left_final_x.setText(str(result["x"]))
         self.ui.left_final_y.setText(str(result["y"]))
         self.ui.left_final_z.setText(str(result["z"]))
-        self.ui.leftSlider.setText(str(result["slider"]))
         self.ui.leftArc.setText(str(result["arc"]))
         self.ui.leftRing.setText(str(result["ring"]))
 
@@ -504,7 +508,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.right_final_x.setText(str(result["x"]))
         self.ui.right_final_y.setText(str(result["y"]))
         self.ui.right_final_z.setText(str(result["z"]))
-        self.ui.rightSlider.setText(str(result["slider"]))
         self.ui.rightArc.setText(str(result["arc"]))
         self.ui.rightRing.setText(str(result["ring"]))
 
@@ -527,15 +530,18 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.rightArcSlicer.blockSignals(False)
 
   def computeDualArcResult(self, side, target_ras, entry_ras=None):
+    
     iso = self.plans[side]["isocenter"]
-
+    if entry_ras is None:
+        self.setupDataProbecoordinates(target_ras[0], target_ras[1], target_ras[2])
+    else:
+        self.setupDataProbecoordinates(entry_ras[0], entry_ras[1], entry_ras[2])
+        
     t = np.array([
         target_ras[0] - iso[0],
         target_ras[1] - iso[1],
         target_ras[2] - iso[2]
     ], dtype=float)
-
-    print(f"[{side}] raw target_ras = {target_ras}, translated t = {t}")
 
     if side == "left":
         local_x = -t[0]
@@ -545,13 +551,10 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     local_y = t[1]
     local_z = t[2]
 
-    print(f"[{side}] preclamp local = ({local_x}, {local_y}, {local_z})")
 
     local_x = max(0.0, min(100.0, local_x))
     local_y = max(0.0, min(200.0, local_y))
     local_z = max(-200.0, min(200.0, local_z))
-
-    slider = max(0.0, min(100.0, local_y))
 
     if entry_ras is not None:
         e = np.array([
@@ -570,14 +573,14 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         val_arc = max(-1.0, min(1.0, a[0] / A))
         arc = 90.0 - math.degrees(math.acos(val_arc))
         arc = max(0.0, min(180.0, abs(arc)))
-
+        
+        
+        diffZ = abs(t[2]) - abs(e[2])
         # Ring angle: computed from Y/Z plane with quadrant logic (Globocentric)
         if abs(a[1]) < 1e-12:
             alpha_y = 90.0
         else:
             alpha_y = math.degrees(math.atan(abs(a[2]) / abs(a[1])))
-
-        diffZ = abs(t[2]) - abs(e[2])
 
         if a[2] == 0:
             if a[1] > 0:
@@ -604,17 +607,23 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if ring > 180.0:
             ring -= 360.0
+        
+        
+        if side == "left":
+            local_x = max(0.0, min(100.0, t[0]))
+        else:
+            local_x = max(0.0, min(100.0, -t[0]))
+            
+        local_z = max(-200.0, min(200.0, -t[2]))
     else:
         arc = 30.0
         ring = 0.0
 
-    print(f"[{side}] final local = ({local_x}, {local_y}, {local_z}), slider={slider}, arc={arc}, ring={ring}")
 
     return {
         "x": round(local_x, 2),
         "y": round(local_y, 2),
         "z": round(local_z, 2),
-        "slider": round(slider, 2),
         "arc": round(arc, 2),
         "ring": round(-ring, 2),
     }
@@ -779,8 +788,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.frameModel = slicer.util.loadModel(self.resourcePath('frame/Frame.stl'))
         self.frameModel.GetDisplayNode().SetColor(1, 238/255, 0)
 
-    self.loadPlanModels("left", "Supportleft.stl", "Sliderleft.stl", "QuarterArc.stl", "Box.stl", "Pathleft.stl", "Axialleft.stl")
-    self.loadPlanModels("right", "Supportright.stl", "Sliderright.stl", "QuarterArcright.stl", "Boxright.stl", "Pathright.stl", "Axial.stl")
+    self.loadPlanModels("left", "Supportleft.stl", "Sliderleft.stl", "QuarterArcleft.stl", "Boxleft.stl", "Pathleft.stl", "Axialleft.stl")
+    self.loadPlanModels("right", "Supportright.stl", "Sliderright.stl", "QuarterArcright.stl", "Boxright.stl", "Pathright.stl", "Axialright.stl")
 
     self.syncPlan()
 
@@ -834,7 +843,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       plan["arcModel"].SetAndObserveTransformNodeID(plan["arcTranNode"].GetID())
       plan["boxModel"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())
       plan["pathModel"].SetAndObserveTransformNodeID(plan["pathTranNode"].GetID())
-      plan["axialModel"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())
+      # plan["axialModel"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())  # Commented out to keep axial fixed in place
 
       # hierarchy
       plan["sliderTranNode"].SetAndObserveTransformNodeID(plan["supportTranNode"].GetID())
@@ -993,7 +1002,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     x = result["x"]
     y = result["y"]
     z = result["z"]
-    slider = result["slider"]
     arc = result["arc"]
     ring = result["ring"]
 
@@ -1008,7 +1016,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     # slider moves along Y axis only
     sliderTransform = vtk.vtkTransform()
-    sliderTransform.Translate(0.0, slider, 0.0)
+    sliderTransform.Translate(0.0, y, 0.0)
     plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
 
     # arc: ring rotation with pivot at slider attachment AND sliding along X
@@ -1068,6 +1076,53 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             entry.SetLocked(1 - entry.GetLocked())
 
 
+  # Data probe - capture mouse move on 3D view
+  def setupDataProbecoordinates(self, x, y, z):
+    left_iso = self.plans["left"]["isocenter"]
+    right_iso = self.plans["right"]["isocenter"]
+    
+    if x<0:
+        x = x - left_iso[0]
+        y = y - left_iso[1]
+        z = z - left_iso[2]
+        z = -z
+        self.ui.leftProbeX.setText(f"{x:.2f}")
+        self.ui.leftProbeY.setText(f"{y:.2f}")
+        self.ui.leftProbeZ.setText(f"{z:.2f}")
+        self.ui.rightProbeX.setText("0.00")
+        self.ui.rightProbeY.setText("0.00")
+        self.ui.rightProbeZ.setText("0.00")
+    else:
+        x = x - right_iso[0]
+        y = y - right_iso[1]
+        z = z - right_iso[2]
+        z = -z
+        x = -x
+        self.ui.rightProbeX.setText(f"{x:.2f}")
+        self.ui.rightProbeY.setText(f"{y:.2f}")
+        self.ui.rightProbeZ.setText(f"{z:.2f}")
+        self.ui.leftProbeX.setText("0.00")
+        self.ui.leftProbeY.setText("0.00")
+        self.ui.leftProbeZ.setText("0.00")        
+        
+            
+  def onMouseMove(self, caller, event):
+    try:
+        pos = caller.GetEventPosition()
+
+        layoutManager = slicer.app.layoutManager()
+        threeDWidget = layoutManager.threeDWidget(0)
+        threeDView = threeDWidget.threeDView()
+        renderer = threeDView.renderWindow().GetRenderers().GetFirstRenderer()
+
+        picker = vtk.vtkCellPicker()
+        picker.SetTolerance(0.001)
+        picker.Pick(pos[0], pos[1], 0, renderer)
+        worldPos = picker.GetPickPosition()
+
+        self.setupDataProbecoordinates(worldPos[0], worldPos[1], worldPos[2])
+    except Exception as e:
+        print("MouseMove Error:", e)
 
   def volumeRender(self):
     currentNode = self.ui.ctDataSelector.currentNode()
