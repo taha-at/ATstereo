@@ -1,3 +1,5 @@
+import os
+import glob
 import vtk,slicer
 from slicer.ScriptedLoadableModule import *
 from slicer.util import VTKObservationMixin
@@ -57,13 +59,20 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     #self.ui.realTImeBtn.connect('clicked(bool)', self.realTimeTrac)
 
     self.ui.showBtn.connect('clicked(bool)', self.volumeRender)
+    self.ui.ctDataSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumeChanged)
 
     
     self.ui.newPlanBtn.connect('clicked(bool)', self.newPlan)
 
     self.ui.btn_autoReg.connect('clicked(bool)', self.autoFourpoints)
 
+    self.ui.btn_pick_isocenters.connect('clicked(bool)', self.on_pick_isocenters)
+    self.ui.btn_register_isocenters.connect('clicked(bool)', self.on_align_isocenters)
+
     self.ui.testBtn.connect('clicked(bool)', self.loadTestCt)
+
+    self.ui.btn_importFiles.connect('clicked(bool)', self.onImportFiles)
+    self.ui.btn_importFolder.connect('clicked(bool)', self.onImportFolder)
 
     
 
@@ -85,6 +94,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     
     self.interactor.AddObserver('MouseMoveEvent', self.onMouseMove)
+    self.onVolumeChanged()
 
 
   def localToGlobal(self, side, x, y, z):
@@ -100,6 +110,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def defineiVar(self):
     self.sPoints = None
     self.fourPoints = None
+    self.isocenterPoints = None
     self.outputTransformNode = None
     self.frameModel = None
     self.realTimeVis = False
@@ -395,6 +406,89 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.ui.errortext.setText(str(rms_error))
   
+  def on_pick_isocenters(self):
+    self.max2D()
+    self.isocenterPoints = slicer.mrmlScene.GetFirstNodeByName("Isocenters")
+    if self.isocenterPoints is None:
+        self.isocenterPoints = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "Isocenters")
+        self.isocenterPoints.RemoveAllControlPoints()
+
+    self.isocenterPoints.GetDisplayNode().SetGlyphType(6) # Star
+    self.isocenterPoints.GetDisplayNode().SetSelectedColor(0, 1, 1) # Cyan
+
+    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+    selectionNode = slicer.app.applicationLogic().GetSelectionNode()
+    selectionNode.SetActivePlaceNodeID(self.isocenterPoints.GetID())
+    interactionNode.SetPlaceModePersistence(1)
+    interactionNode.SetCurrentInteractionMode(interactionNode.Place)
+    slicer.util.messageBox("Please place exactly 2 points: \n1. Left Isocenter\n2. Right Isocenter")
+
+  def on_align_isocenters(self):
+    if self.isocenterPoints is None or self.isocenterPoints.GetNumberOfControlPoints() < 2:
+        slicer.util.messageBox("Please pick both Left and Right isocenter points first.")
+        return
+
+    # 1. Get the Left and Right points picked by user
+    p_left = [0.0, 0.0, 0.0]
+    p_right = [0.0, 0.0, 0.0]
+    self.isocenterPoints.GetNthControlPointPositionWorld(0, p_left)
+    self.isocenterPoints.GetNthControlPointPositionWorld(1, p_right)
+
+    # 2. Compute Midpoint and a Synthetic Up Point
+    p_mid = [(p_left[0] + p_right[0]) / 2.0,
+             (p_left[1] + p_right[1]) / 2.0,
+             (p_left[2] + p_right[2]) / 2.0]
+             
+    # Synthesize a third point to constrain rotation around the LR axis.
+    # Assuming standard orientation, we add an offset in Z (Superior) direction.
+    p_up = [p_mid[0], p_mid[1], p_mid[2] + 100.0]
+
+    fromPoints = vtk.vtkPoints()
+    fromPoints.InsertNextPoint(p_left)
+    fromPoints.InsertNextPoint(p_right)
+    fromPoints.InsertNextPoint(p_up)
+
+    # 3. Define the theoretical target isocenters
+    iso_left = [-100.0, -100.0, 100.0]
+    iso_right = [100.0, -100.0, 100.0]
+    iso_mid = [0.0, -100.0, 100.0]
+    iso_up = [0.0, -100.0, 200.0]
+
+    toPoints = vtk.vtkPoints()
+    toPoints.InsertNextPoint(iso_left)
+    toPoints.InsertNextPoint(iso_right)
+    toPoints.InsertNextPoint(iso_up)
+
+    # 4. Compute Rigid Transform
+    landmarkTransform = vtk.vtkLandmarkTransform()
+    landmarkTransform.SetSourceLandmarks(fromPoints)
+    landmarkTransform.SetTargetLandmarks(toPoints)
+    landmarkTransform.SetModeToRigidBody()
+    landmarkTransform.Update()
+    
+    calculatedTransform = vtk.vtkMatrix4x4()
+    landmarkTransform.GetMatrix(calculatedTransform)
+
+    # 5. Apply to output node
+    self.outputTransformNode = slicer.mrmlScene.GetFirstNodeByName("pTrans")
+    if self.outputTransformNode is None:
+      self.outputTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "pTrans")
+    self.outputTransformNode.SetMatrixTransformToParent(calculatedTransform)
+
+    self.isocenterPoints.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
+
+    leksell = self.ui.ctDataSelector.currentNode()
+    if leksell:
+      leksell.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
+
+    # 6. Reset views
+    layoutManager = slicer.app.layoutManager()
+    threeDWidget = layoutManager.threeDWidget(0) 
+    threeDView = threeDWidget.threeDView()
+    threeDView.resetFocalPoint() 
+    slicer.util.resetSliceViews()
+    slicer.util.messageBox("Alignment complete!")
+
   def hidePoints(self):
     node1= self.fourPoints
     node2= self.sPoints
@@ -407,6 +501,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
   def on_add_target_point_left(self):
       self.hidePoints()
       self.plans["left"]["target"] = self.createPlanPointNode("targetPointLeft", "t_left")
+    
 
   def on_add_entry_point_left(self):
       self.plans["left"]["entry"] = self.createPlanPointNode("entryPointLeft", "e_left")
@@ -542,6 +637,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         target_ras[1] - iso[1],
         target_ras[2] - iso[2]
     ], dtype=float)
+    
 
     if side == "left":
         local_x = -t[0]
@@ -553,7 +649,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
     local_x = max(0.0, min(100.0, local_x))
-    local_y = max(0.0, min(200.0, local_y))
+    local_y = max(-120.0, min(200.0, local_y))
     local_z = max(-200.0, min(200.0, local_z))
 
     if entry_ras is not None:
@@ -572,7 +668,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         # Arc angle: from X axis (Globocentric)
         val_arc = max(-1.0, min(1.0, a[0] / A))
         arc = 90.0 - math.degrees(math.acos(val_arc))
-        arc = max(0.0, min(180.0, abs(arc)))
+        arc = max(0.0, min(360.0, abs(arc)))
         
         
         diffZ = abs(t[2]) - abs(e[2])
@@ -584,30 +680,26 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if a[2] == 0:
             if a[1] > 0:
-                ring = 270.0
-            else:
                 ring = 90.0
+            else:
+                ring = 270.0
         elif a[1] == 0:
             if diffZ > 0:
-                ring = 0.0
-            else:
                 ring = 180.0
+            else:
+                ring = 0
         elif diffZ > 0:
             if a[1] > 0:
-                ring = 270.0 + alpha_y
-            else:
                 ring = 90.0 - alpha_y
+            else:
+                ring = 270.0 + alpha_y
         elif diffZ < 0:
             if a[1] < 0:
-                ring = 90.0 + alpha_y
-            else:
                 ring = 270.0 - alpha_y
+            else:
+                ring = 90.0 + alpha_y 
         else:
             ring = 0.0
-
-        if ring > 180.0:
-            ring -= 360.0
-        
         
         if side == "left":
             local_x = max(0.0, min(100.0, t[0]))
@@ -619,13 +711,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         arc = 30.0
         ring = 0.0
 
-
     return {
         "x": round(local_x, 2),
         "y": round(local_y, 2),
         "z": round(local_z, 2),
         "arc": round(arc, 2),
-        "ring": round(-ring, 2),
+        "ring": round(360 - ring, 2),
     }
 
 
@@ -733,6 +824,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     nodeList = [
         self.sPoints,
         self.fourPoints,
+        self.isocenterPoints,
         self.outputTransformNode,
         self.frameModel,
     ]
@@ -766,18 +858,18 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.rightRing.setText("0")
 
     self.ui.left_final_x.setText("0")
-    self.ui.left_final_y.setText("0")
+    self.ui.left_final_y.setText("-60")
     self.ui.left_final_z.setText("0")
 
     self.ui.right_final_x.setText("0")
-    self.ui.right_final_y.setText("0")
+    self.ui.right_final_y.setText("-60")
     self.ui.right_final_z.setText("0")
 
     self.ui.errortext.setText("0")
     self.ui.distanceText.setText("0")
 
-    self.ui.leftSlider.setText("0")
-    self.ui.rightSlider.setText("0")
+    self.ui.leftSlider.setText("-60")
+    self.ui.rightSlider.setText("-60")
     self.ui.depthEdit.setText("200")
     self.defineiVar()
 
@@ -851,9 +943,93 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
       plan["boxTranNode"].SetAndObserveTransformNodeID(plan["arcTranNode"].GetID())
       plan["pathTranNode"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())
 
+  def onImportFiles(self):
+    """Open a file dialog to select one or more NIfTI files to load."""
+    parent = slicer.util.mainWindow()
+    filePaths = qt.QFileDialog.getOpenFileNames(
+        parent,
+        "Select NIfTI Files",
+        os.path.expanduser("~"),
+        "NIfTI Files (*.nii *.nii.gz);;All Files (*)"
+    )
+    if filePaths:
+        self._loadNiftiFiles(filePaths)
+
+  def onImportFolder(self):
+    """Open a folder dialog and recursively scan for NIfTI files to load."""
+    parent = slicer.util.mainWindow()
+    folderPath = qt.QFileDialog.getExistingDirectory(
+        parent,
+        "Select Folder Containing NIfTI Files",
+        os.path.expanduser("~"),
+        qt.QFileDialog.ShowDirsOnly
+    )
+    if folderPath and folderPath != ".":
+        niftiFiles = sorted(
+            glob.glob(os.path.join(folderPath, "**", "*.nii"), recursive=True)
+            + glob.glob(os.path.join(folderPath, "**", "*.nii.gz"), recursive=True)
+        )
+        if not niftiFiles:
+            slicer.util.messageBox("No NIfTI files (.nii, .nii.gz) found in the selected folder.")
+            return
+        self._loadNiftiFiles(niftiFiles)
+
+  def _loadNiftiFiles(self, filePaths):
+    """Load a list of NIfTI file paths into the scene.
+
+    Skips files already loaded (by filename), shows a wait cursor during loading,
+    updates the status label, and auto-selects the last loaded volume.
+    """
+    slicer.app.setOverrideCursor(qt.Qt.WaitCursor)
+    try:
+        # Get names of volumes already in the scene for duplicate detection
+        existingNames = set()
+        for node in slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode"):
+            existingNames.add(node.GetName())
+        for node in slicer.util.getNodesByClass("vtkMRMLVectorVolumeNode"):
+            existingNames.add(node.GetName())
+
+        loadedCount = 0
+        skippedCount = 0
+        lastNode = None
+
+        for filePath in filePaths:
+            baseName = os.path.basename(filePath).split(".nii")[0]
+            if baseName in existingNames:
+                skippedCount += 1
+                continue
+            try:
+                node = slicer.util.loadVolume(filePath)
+                if node:
+                    slicer.modules.volumes.logic().CenterVolume(node)
+                    lastNode = node
+                    loadedCount += 1
+                    existingNames.add(node.GetName())
+            except Exception as e:
+                print(f"Failed to load {filePath}: {e}")
+
+        # Update status label
+        statusParts = []
+        if loadedCount > 0:
+            statusParts.append(f"Loaded {loadedCount} volume(s)")
+        if skippedCount > 0:
+            statusParts.append(f"Skipped {skippedCount} duplicate(s)")
+        if not statusParts:
+            statusParts.append("No new files to load")
+        self.ui.importStatusLabel.setText(" | ".join(statusParts))
+
+        # Auto-select the last loaded volume in ctDataSelector
+        if lastNode is not None:
+            self.ui.ctDataSelector.setCurrentNode(lastNode)
+
+    finally:
+        slicer.app.restoreOverrideCursor()
+
   def loadTestCt(self):
      ctPath=self.resourcePath('ctData/test_CT.nrrd')
-     slicer.util.loadVolume(ctPath)
+     node = slicer.util.loadVolume(ctPath)
+     if node:
+         slicer.modules.volumes.logic().CenterVolume(node)
      self.ui.ctDataSelector.setCurrentNode(slicer.util.getNode("test_CT"))
 
   def syncPlan(self):
@@ -874,7 +1050,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     px, py, pz = self.plans[side]["isocenter"]
     t = vtk.vtkTransform()
     t.Translate(px, py, pz)
-    t.RotateX(ring_value)
+    t.RotateX(360-ring_value)
     t.Translate(-px, -py, -pz)
     return t
 
@@ -916,7 +1092,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         arcTransform.Translate(-x, 0.0, 0.0)
 
     arcTransform.Translate(px, py, pz)
-    arcTransform.RotateX(ring_value)
+    arcTransform.RotateX(360-ring_value)
     arcTransform.Translate(-px, -py, -pz)
     plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
@@ -978,12 +1154,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         px += 200
         
     arcTransform.Translate(px, py, pz)
-    arcTransform.RotateX(ring_value)
+    arcTransform.RotateX(360-ring_value)
     arcTransform.Translate(-px, -py, -pz)
     
     plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
     # Update slider transform (Y local axis)
-    slider_y = max(0.0, min(200.0, y))
+    slider_y = max(-60.0, min(200.0, y))
     sliderTransform = vtk.vtkTransform()
     sliderTransform.Translate(0.0, slider_y, 0.0)
     plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
@@ -1038,12 +1214,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         arcTransform.Translate(-x, 0.0, 0.0)
 
     arcTransform.Translate(px, py, pz)
-    arcTransform.RotateX(ring_value)
+    arcTransform.RotateX(360 - ring_value)
     arcTransform.Translate(-px, -py, -pz)
     plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
     # box: arc angle rotation around isocenter pivot
-    arc_value = max(0.0, min(180.0, arc))
+    arc_value = max(0.0, min(360.0, arc))
     if side == "left":
         arc_value = -arc_value
 
@@ -1131,14 +1307,37 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         return
 
     volRenLogic = slicer.modules.volumerendering.logic()
-    displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(currentNode)
-    displayNode.SetVisibility(True)
+    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(currentNode)
+    if displayNode:
+        isVisible = displayNode.GetVisibility()
+        displayNode.SetVisibility(not isVisible)
+        if not isVisible:
+            self.ui.showBtn.setText("Hide 3D")
+        else:
+            self.ui.showBtn.setText("Show 3D")
+    else:
+        displayNode = volRenLogic.CreateDefaultVolumeRenderingNodes(currentNode)
+        displayNode.SetVisibility(True)
+        self.ui.showBtn.setText("Hide 3D")
 
     layoutManager = slicer.app.layoutManager()
     threeDWidget = layoutManager.threeDWidget(0)
     threeDView = threeDWidget.threeDView()
     threeDView.resetFocalPoint()
     slicer.util.resetSliceViews()
+
+  def onVolumeChanged(self):
+    currentNode = self.ui.ctDataSelector.currentNode()
+    if currentNode is None:
+        self.ui.showBtn.setText("Show 3D")
+        return
+
+    volRenLogic = slicer.modules.volumerendering.logic()
+    displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(currentNode)
+    if displayNode and displayNode.GetVisibility():
+        self.ui.showBtn.setText("Hide 3D")
+    else:
+        self.ui.showBtn.setText("Show 3D")
 
 
 class track:

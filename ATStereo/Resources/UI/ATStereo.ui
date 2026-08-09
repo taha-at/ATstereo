@@ -105,6 +105,68 @@ QFrame {
      </property>
      <layout class="QVBoxLayout" name="verticalLayout_2">
 
+      <!-- Data Import -->
+      <item>
+       <widget class="QGroupBox" name="dataImportBox">
+        <property name="title">
+         <string>Data Import</string>
+        </property>
+        <layout class="QVBoxLayout" name="dataImportLayout">
+         <item>
+          <layout class="QHBoxLayout" name="importButtonsLayout">
+           <item>
+            <widget class="QPushButton" name="btn_importFiles">
+             <property name="text">
+              <string>Browse Files</string>
+             </property>
+             <property name="toolTip">
+              <string>Select one or more NIfTI files (.nii, .nii.gz) to load</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_importFolder">
+             <property name="text">
+              <string>Browse Folder</string>
+             </property>
+             <property name="toolTip">
+              <string>Select a folder to recursively scan for NIfTI files</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QLabel" name="importStatusLabel">
+           <property name="text">
+            <string>No files loaded</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+
+      <item>
+       <spacer name="verticalSpacer_importSep">
+        <property name="orientation">
+         <enum>Qt::Vertical</enum>
+        </property>
+        <property name="sizeType">
+         <enum>QSizePolicy::Fixed</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>10</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+
       <!-- Top controls -->
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout">
@@ -317,7 +379,26 @@ QFrame {
           </layout>
          </item>
 
-         <item row="1" column="0">
+         <item row="1" column="0" colspan="2">
+          <layout class="QHBoxLayout" name="workflowMiddleLayout">
+           <item>
+            <widget class="QPushButton" name="btn_pick_isocenters">
+             <property name="text">
+              <string>Step1.5: Pick L/R Isocenters</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="btn_register_isocenters">
+             <property name="text">
+              <string>Step1.6: Align to Isocenters</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+
+         <item row="2" column="0">
           <widget class="QGroupBox" name="leftTrajectoryBox">
            <property name="title">
             <string>Left Trajectory</string>
@@ -341,7 +422,7 @@ QFrame {
           </widget>
          </item>
 
-         <item row="1" column="1">
+         <item row="2" column="1">
           <widget class="QGroupBox" name="rightTrajectoryBox">
            <property name="title">
             <string>Right Trajectory</string>
@@ -365,7 +446,7 @@ QFrame {
           </widget>
          </item>
 
-         <item row="2" column="0" colspan="2">
+         <item row="3" column="0" colspan="2">
           <widget class="QFrame" name="frame">
            <property name="frameShape">
             <enum>QFrame::StyledPanel</enum>
@@ -492,16 +573,7 @@ QFrame {
               </property>
              </widget>
             </item>
-            <item row="0" column="4">
-             <widget class="QLabel" name="label_res_slider">
-              <property name="text">
-               <string>Slider</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignCenter</set>
-              </property>
-             </widget>
-            </item>
+           
 
             <item row="1" column="0">
              <widget class="QLabel" name="label_left">
@@ -552,19 +624,6 @@ QFrame {
               </property>
              </widget>
             </item>
-            <item row="1" column="4">
-             <widget class="QLineEdit" name="leftSlider">
-              <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignCenter</set>
-              </property>
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
 
             <item row="2" column="0">
              <widget class="QLabel" name="label_right">
@@ -604,19 +663,6 @@ QFrame {
             </item>
             <item row="2" column="3">
              <widget class="QLineEdit" name="right_final_z">
-              <property name="text">
-               <string>0</string>
-              </property>
-              <property name="alignment">
-               <set>Qt::AlignCenter</set>
-              </property>
-              <property name="readOnly">
-               <bool>true</bool>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="4">
-             <widget class="QLineEdit" name="rightSlider">
               <property name="text">
                <string>0</string>
               </property>
@@ -1110,7 +1156,7 @@ QFrame {
                  <double>1.000000000000000</double>
                 </property>
                 <property name="minimum">
-                 <double>0.000000000000000</double>
+                 <double>-120.000000000000000</double>
                 </property>
                 <property name="maximum">
                  <double>200.000000000000000</double>
@@ -1239,10 +1285,10 @@ QFrame {
                  <double>1.000000000000000</double>
                 </property>
                 <property name="minimum">
-                 <double>-180.000000000000000</double>
+                 <double>0.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>180.000000000000000</double>
+                 <double>360.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
@@ -1334,7 +1380,7 @@ QFrame {
                  <double>1.000000000000000</double>
                 </property>
                 <property name="minimum">
-                 <double>0.000000000000000</double>
+                 <double>-120.000000000000000</double>
                 </property>
                 <property name="maximum">
                  <double>200.000000000000000</double>
@@ -1463,10 +1509,10 @@ QFrame {
                  <double>1.000000000000000</double>
                 </property>
                 <property name="minimum">
-                 <double>-180.000000000000000</double>
+                 <double>0.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>180.000000000000000</double>
+                 <double>360.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
