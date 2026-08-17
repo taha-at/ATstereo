@@ -241,7 +241,7 @@ QFrame {
       <item>
        <widget class="QGroupBox" name="FrameModelBox">
         <property name="title">
-         <string>Frame (200 × 200 × 200 mm)</string>
+         <string>Frame (200 × 120 × 120 mm)</string>
         </property>
         <layout class="QGridLayout" name="frameGrid">
          <item row="0" column="0">
@@ -268,7 +268,7 @@ QFrame {
          <item row="0" column="3">
           <widget class="QLineEdit" name="heightEdit">
            <property name="text">
-            <string>200</string>
+            <string>120</string>
            </property>
           </widget>
          </item>
@@ -282,7 +282,7 @@ QFrame {
          <item row="0" column="5">
           <widget class="QLineEdit" name="depthEdit">
            <property name="text">
-            <string>200</string>
+            <string>120</string>
            </property>
           </widget>
          </item>
@@ -294,20 +294,20 @@ QFrame {
       <item>
        <widget class="QGroupBox" name="mechanismBox">
         <property name="title">
-         <string>Mechanism</string>
+         <string>Mechanism per quarter arc</string>
         </property>
         <layout class="QGridLayout" name="mechanismGrid">
          <item row="0" column="0">
-          <widget class="QLabel" name="label_supportLength">
+          <widget class="QLabel" name="label_XTravel">
            <property name="text">
-            <string>Support Length (mm)</string>
+            <string>X Travel (mm)</string>
            </property>
           </widget>
          </item>
          <item row="0" column="1">
-          <widget class="QLineEdit" name="supportLengthEdit">
+          <widget class="QLineEdit" name="XTravelEdit">
            <property name="text">
-            <string>200</string>
+            <string>100</string>
            </property>
            <property name="readOnly">
             <bool>true</bool>
@@ -315,16 +315,16 @@ QFrame {
           </widget>
          </item>
          <item row="0" column="2">
-          <widget class="QLabel" name="label_sliderTravel">
+          <widget class="QLabel" name="label_YTravel">
            <property name="text">
-            <string>Slider Travel (mm)</string>
+            <string>Y Travel (mm)</string>
            </property>
           </widget>
          </item>
          <item row="0" column="3">
-          <widget class="QLineEdit" name="sliderTravelEdit">
+          <widget class="QLineEdit" name="YTravelEdit">
            <property name="text">
-            <string>200</string>
+            <string>-60 - 120</string>
            </property>
            <property name="readOnly">
             <bool>true</bool>
@@ -332,16 +332,50 @@ QFrame {
           </widget>
          </item>
          <item row="0" column="4">
-          <widget class="QLabel" name="label_arcRange">
+          <widget class="QLabel" name="label_ZRange">
            <property name="text">
-            <string>Arc Range (deg)</string>
+            <string>Z Travel (mm)</string>
            </property>
           </widget>
          </item>
          <item row="0" column="5">
-          <widget class="QLineEdit" name="arcRangeEdit">
+          <widget class="QLineEdit" name="ZRangeEdit">
+           <property name="text">
+            <string>120</string>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_arc">
+           <property name="text">
+            <string>Arc Angle (deg)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="arcSpinBox">
            <property name="text">
             <string>0 - 60</string>
+           </property>
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QLabel" name="label_Ring">
+           <property name="text">
+            <string>Ring Angle (deg)</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="3">
+          <widget class="QLineEdit" name="ringSpinBox">
+           <property name="text">
+            <string>0 - 360</string>
            </property>
            <property name="readOnly">
             <bool>true</bool>
@@ -361,44 +395,25 @@ QFrame {
         <layout class="QGridLayout" name="gridLayout_5">
 
          <item row="0" column="0" colspan="2">
-          <layout class="QHBoxLayout" name="workflowTopLayout">
-           <item>
-            <widget class="QPushButton" name="btn_choose_point">
-             <property name="text">
-              <string>Step1: Mark Frame Points</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="btn_autoReg">
-             <property name="text">
-              <string>Step2: Auto Align</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </item>
-
-         <item row="1" column="0" colspan="2">
           <layout class="QHBoxLayout" name="workflowMiddleLayout">
            <item>
             <widget class="QPushButton" name="btn_pick_isocenters">
              <property name="text">
-              <string>Step1.5: Pick L/R Isocenters</string>
+              <string>Step1: Pick 4 points </string>
              </property>
             </widget>
            </item>
            <item>
             <widget class="QPushButton" name="btn_register_isocenters">
              <property name="text">
-              <string>Step1.6: Align to Isocenters</string>
+              <string>Step2: Align to Isocenters</string>
              </property>
             </widget>
            </item>
           </layout>
          </item>
 
-         <item row="2" column="0">
+         <item row="1" column="0">
           <widget class="QGroupBox" name="leftTrajectoryBox">
            <property name="title">
             <string>Left Trajectory</string>
@@ -422,7 +437,7 @@ QFrame {
           </widget>
          </item>
 
-         <item row="2" column="1">
+         <item row="1" column="1">
           <widget class="QGroupBox" name="rightTrajectoryBox">
            <property name="title">
             <string>Right Trajectory</string>
@@ -446,7 +461,7 @@ QFrame {
           </widget>
          </item>
 
-         <item row="3" column="0" colspan="2">
+         <item row="2" column="0" colspan="2">
           <widget class="QFrame" name="frame">
            <property name="frameShape">
             <enum>QFrame::StyledPanel</enum>
@@ -1156,10 +1171,10 @@ QFrame {
                  <double>1.000000000000000</double>
                 </property>
                 <property name="minimum">
-                 <double>-120.000000000000000</double>
+                 <double>-60.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>200.000000000000000</double>
+                 <double>120.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
@@ -1201,7 +1216,7 @@ QFrame {
                  <double>0.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>200.000000000000000</double>
+                 <double>120.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
@@ -1380,10 +1395,10 @@ QFrame {
                  <double>1.000000000000000</double>
                 </property>
                 <property name="minimum">
-                 <double>-120.000000000000000</double>
+                 <double>-60.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>200.000000000000000</double>
+                 <double>120.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
@@ -1425,7 +1440,7 @@ QFrame {
                  <double>0.000000000000000</double>
                 </property>
                 <property name="maximum">
-                 <double>200.000000000000000</double>
+                 <double>120.000000000000000</double>
                 </property>
                 <property name="value">
                  <double>0.000000000000000</double>
