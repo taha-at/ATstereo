@@ -1,3 +1,15 @@
+# ==============================================================================
+# ATStereo Module
+# 
+# NOTICE: The stereotactic frame geometry and associated methodologies 
+# implemented in this software are protected by patents. 
+# 
+# This software is provided strictly for academic, research, and non-commercial 
+# use ONLY. Any commercial use, manufacturing, sale, or distribution is 
+# strictly prohibited.
+# 
+# ==============================================================================
+
 import os
 import glob
 import vtk,slicer
@@ -7,6 +19,7 @@ import math,functools
 import numpy as np
 from Resources.stereoLogic import stereoLogic
 import qt
+
 class ATStereo(ScriptedLoadableModule):
 
   def __init__(self, parent):
@@ -14,8 +27,12 @@ class ATStereo(ScriptedLoadableModule):
     self.parent.title = "ATStereo" 
     self.parent.categories = ["Neurosurgery"] 
     self.parent.contributors = ["HackerOne"]  
-    self.parent.helpText = """https://github.com/Hacker1one/ATstereo"""
-    self.parent.acknowledgementText = """Thanks for 3DSlicer Forum """
+    self.parent.helpText = """
+    <b>ATStereo</b><br>
+    https://github.com/Hacker1one/ATstereo<br><br>
+    <b>NOTICE:</b> The frame geometry is patented. This software is restricted to 
+    academic and non-commercial research use only. Commercial use is prohibited.
+    """
 
 class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
@@ -41,10 +58,10 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.btn_clear.connect('clicked(bool)', self.reset)
     
     #transform - per-side arc angle and ring sliders
-    self.ui.leftArcSlicer.valueChanged.connect(lambda: self.pRotateSide("left"))
-    self.ui.leftRingSlicer.valueChanged.connect(lambda: self.ringRotateSide("left"))
-    self.ui.rightArcSlicer.valueChanged.connect(lambda: self.pRotateSide("right"))
-    self.ui.rightRingSlicer.valueChanged.connect(lambda: self.ringRotateSide("right"))
+    self.ui.leftArcSlicer.valueChanged.connect(lambda: self.compute_arc_kinematics("left"))
+    self.ui.leftRingSlicer.valueChanged.connect(lambda: self.compute_ring_kinematics("left"))
+    self.ui.rightArcSlicer.valueChanged.connect(lambda: self.compute_arc_kinematics("right"))
+    self.ui.rightRingSlicer.valueChanged.connect(lambda: self.compute_ring_kinematics("right"))
     self.ui.leftLocalXSlicer.valueChanged.connect(lambda: self.slider_transform("left"))
     self.ui.leftLocalYSlicer.valueChanged.connect(lambda: self.slider_transform("left"))
     self.ui.leftLocalZSlicer.valueChanged.connect(lambda: self.slider_transform("left"))
@@ -80,7 +97,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.track=track()
 
-    #self.creatPlanTable()
+    #self.initialize_coordinate_table()
 
     # Setup 3D view mouse move observer for data probe
     layoutManager = slicer.app.layoutManager()
@@ -98,21 +115,21 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def clear_nodes(self):
     nodeList = [
-        self.sPoints,
-        self.fourPoints,
+        self.theoretical_fiducials,
+        self.registration_markers,
         self.isocenterPoints,
         self.outputTransformNode,
         self.frameModel,
     ]
     for side in ["left", "right"]:
-      if side in self.plans:
-          plan = self.plans[side]
+      if side in self.trajectory_targets:
+          plan = self.trajectory_targets[side]
           nodeList.extend([
               plan.get("target"), plan.get("entry"), plan.get("tubeModel"),
               plan.get("supportModel"), plan.get("sliderModel"), plan.get("arcModel"),
               plan.get("boxModel"), plan.get("pathModel"), plan.get("axialModel"),
-              plan.get("supportTranNode"), plan.get("sliderTranNode"), plan.get("arcTranNode"),
-              plan.get("boxTranNode"), plan.get("pathTranNode"),
+              plan.get("ATStereo_X_DriveTransform"), plan.get("ATStereo_Y_DriveTransform"), plan.get("ATStereo_Z_DriveTransform"),
+              plan.get("ATStereo_RingMountTransform"), plan.get("ATStereo_TrajectoryGuideTransform"),
           ])
     for node in nodeList:
         if node is not None:
@@ -130,14 +147,14 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def defineiVar(self):
-    self.sPoints = None
-    self.fourPoints = None
+    self.theoretical_fiducials = None
+    self.registration_markers = None
     self.isocenterPoints = None
     self.outputTransformNode = None
     self.frameModel = None
     self.realTimeVis = False
 
-    self.plans = {
+    self.trajectory_targets = {
         "left": {
             "target": None,
             "entry": None,
@@ -150,11 +167,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "pathModel": None,
             "axialModel": None,
 
-            "supportTranNode": None,
-            "sliderTranNode": None,
-            "arcTranNode": None,
-            "boxTranNode": None,
-            "pathTranNode": None,
+            "ATStereo_X_DriveTransform": None,
+            "ATStereo_Y_DriveTransform": None,
+            "ATStereo_Z_DriveTransform": None,
+            "ATStereo_RingMountTransform": None,
+            "ATStereo_TrajectoryGuideTransform": None,
 
             "result": None,
             "offset": None,
@@ -173,11 +190,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             "pathModel": None,
             "axialModel": None,
 
-            "supportTranNode": None,
-            "sliderTranNode": None,
-            "arcTranNode": None,
-            "boxTranNode": None,
-            "pathTranNode": None,
+            "ATStereo_X_DriveTransform": None,
+            "ATStereo_Y_DriveTransform": None,
+            "ATStereo_Z_DriveTransform": None,
+            "ATStereo_RingMountTransform": None,
+            "ATStereo_TrajectoryGuideTransform": None,
 
             "result": None,
             "offset": None,
@@ -210,7 +227,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     interactionNode.SetCurrentInteractionMode(interactionNode.Place)
     return node
 ####################################################################################### for Rigist Frame    
-  def creatPlanTable(self):
+  def initialize_coordinate_table(self):
         table=self.ui.planTable
         table.horizontalHeader().setSectionResizeMode(0, 1)
         table.horizontalHeader().setSectionResizeMode(1, 1)
@@ -219,51 +236,51 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         table.horizontalHeader().setSectionResizeMode(4, 2)
         table.horizontalHeader().setSectionResizeMode(5, 2)
 
-  def showStandPoints(self,points): # show standard points
+  def render_theoretical_fiducials(self,points): # show standard points
 
-    self.sPoints = slicer.mrmlScene.GetFirstNodeByName("S")
-    if (self.sPoints is None):
-      self.sPoints = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "S")
-    self.sPoints.RemoveAllControlPoints()
+    self.theoretical_fiducials = slicer.mrmlScene.GetFirstNodeByName("S")
+    if (self.theoretical_fiducials is None):
+      self.theoretical_fiducials = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "S")
+    self.theoretical_fiducials.RemoveAllControlPoints()
 
-    self.sPoints.SetLocked(1)
+    self.theoretical_fiducials.SetLocked(1)
      
-    display_node = self.sPoints.GetDisplayNode()
+    display_node = self.theoretical_fiducials.GetDisplayNode()
     display_node.SetGlyphType(5)
     display_node.SetTextScale(3)
     
     for i in points:
-      self.sPoints.AddFiducial(i[0],i[1],i[2])
+      self.theoretical_fiducials.AddFiducial(i[0],i[1],i[2])
 
     #rename 4 points
     name=["A  ","B  ","C  ","D  "]
 
     for i in range(4):
-      self.sPoints.SetNthControlPointLabel(i, name[i])
+      self.theoretical_fiducials.SetNthControlPointLabel(i, name[i])
 
-  def on_choose_four_point(self):#select 4 points
+  def on_select_registration_markers(self):#select 4 points
     self.max2D()
-    self.fourPoints= slicer.mrmlScene.GetFirstNodeByName("pointset")
-    if(self.fourPoints is None):
+    self.registration_markers= slicer.mrmlScene.GetFirstNodeByName("pointset")
+    if(self.registration_markers is None):
         #slicer.app.layoutManager().threeDWidget(0).threeDView().lookFromAxis(3)
-        self.fourPoints= slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "pointset")
-        self.fourPoints.RemoveAllControlPoints()
+        self.registration_markers= slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "pointset")
+        self.registration_markers.RemoveAllControlPoints()
 
-    self.fourPoints.GetDisplayNode().SetGlyphType(2)
+    self.registration_markers.GetDisplayNode().SetGlyphType(2)
     
-    self.fourPoints.RemoveAllObservers()
-    self.fourPoints.AddObserver(
+    self.registration_markers.RemoveAllObservers()
+    self.registration_markers.AddObserver(
     slicer.vtkMRMLMarkupsNode.PointAddedEvent,
     functools.partial(self.on_four_point_added, actor="f"))
 
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-    selectionNode.SetActivePlaceNodeID(self.fourPoints.GetID())
+    selectionNode.SetActivePlaceNodeID(self.registration_markers.GetID())
     placeModePersistence = 1
     interactionNode.SetPlaceModePersistence(placeModePersistence)
     interactionNode.SetCurrentInteractionMode(interactionNode.Place)
    
-    pointListDisplayNode = self.fourPoints.GetDisplayNode()
+    pointListDisplayNode = self.registration_markers.GetDisplayNode()
     pointListDisplayNode.SetSelectedColor(1,1,0)
 
 
@@ -274,7 +291,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if redSliceCompositeNode:
         redSliceCompositeNode.SetBackgroundVolumeID(redSliceCompositeNode.GetBackgroundVolumeID())
   
-  def fourUp(self):
+  def identify_superior_fiducials(self):
 
     layoutManager = slicer.app.layoutManager()
     layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
@@ -297,67 +314,80 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     return standardList
   
-  def changeOrder(self,vtkpoints):#creat order for 4 points
-
-    from_new = []
+  def sort_fiducials_anatomically(self, vtkpoints):
+    # Retrieve points into a numpy array for vector operations
+    pts = []
     for i in range(4):
-        point = [0, 0, 0] 
-        vtkpoints.GetPoint(i, point) 
-        from_new.append(point) 
+        p = [0, 0, 0]
+        vtkpoints.GetPoint(i, p)
+        pts.append(np.array(p))
 
-    # order by x
-    points_sorted_by_x = sorted(from_new, key=lambda point: point[0], reverse=True)
+    # Calculate the spatial centroid of the 4 markers
+    centroid = np.mean(pts, axis=0)
+    
+    # Classify each point into anatomical quadrants relative to the centroid
+    # RAS Coordinate System: +X is Right, -X is Left. +Y is Anterior, -Y is Posterior.
+    sorted_pts = [None] * 4
+    for p in pts:
+        is_right = p[0] > centroid[0]
+        is_anterior = p[1] > centroid[1]
 
-    x_max_points = points_sorted_by_x[:2]
+        if not is_right and is_anterior:
+            sorted_pts[0] = p  # Left-Anterior
+        elif is_right and is_anterior:
+            sorted_pts[1] = p  # Right-Anterior
+        elif is_right and not is_anterior:
+            sorted_pts[2] = p  # Right-Posterior
+        elif not is_right and not is_anterior:
+            sorted_pts[3] = p  # Left-Posterior
 
-    x_max_points_sorted_by_y = sorted(x_max_points, key=lambda point: point[1], reverse=True)
-    B = x_max_points_sorted_by_y[0]
-    C = x_max_points_sorted_by_y[1]
+    # Construct the ordered vtkPoints object and a native python list
+    from_points_vtk = vtk.vtkPoints()
+    sorted_pts_list = []
+    
+    for point in sorted_pts:
+        if point is not None:
+            pt_list = point.tolist()
+            from_points_vtk.InsertNextPoint(pt_list)
+            sorted_pts_list.append(pt_list)
+        else:
+            # Fallback in case of highly skewed marker placement (centroid classification fails)
+            print("Warning: Spatial quadrant classification failed, reverting to linear sort.")
+            pts.sort(key=lambda coord: (coord[0], coord[1]))
+            sorted_pts_list = [fallback_pt.tolist() for fallback_pt in pts]
+            for fallback_pt in pts:
+                from_points_vtk.InsertNextPoint(fallback_pt.tolist())
+            break
 
-    remaining_points = points_sorted_by_x[2:]
-    remaining_points_sorted_by_y = sorted(remaining_points, key=lambda point: point[1], reverse=True)
-    A = remaining_points_sorted_by_y[0]
-    D= remaining_points_sorted_by_y[1]
-
-    from_new.clear()
-    from_new.append(A)
-    from_new.append(B)
-    from_new.append(C)
-    from_new.append(D)
-
-    from_points_vtk = vtk.vtkPoints() 
-    for point in from_new:
-      from_points_vtk.InsertNextPoint(point)
-
-    return from_points_vtk,from_new
+    return from_points_vtk, sorted_pts_list
   
-  def autoFourpoints(self):
-      if self.fourPoints is None :
+  def autodetect_frame_markers(self):
+      if self.registration_markers is None :
         slicer.util.messageBox("Please Select 4 Points")
         return
-      n = self.fourPoints.GetNumberOfControlPoints()
+      n = self.registration_markers.GetNumberOfControlPoints()
       if n != 4:
         slicer.util.messageBox("Please Select 4 Points")
         return
       
       leksell = self.ui.ctDataSelector.currentNode()
-      rass=self.track.startTrack(leksell,self.fourPoints)
+      rass=self.track.startTrack(leksell,self.registration_markers)
       for i in range(4):
-         self.fourPoints.SetNthControlPointPosition(i,rass[i])
+         self.registration_markers.SetNthControlPointPosition(i,rass[i])
 
-      self.on_register_point()
+      self.execute_rigid_registration()
          
-  def on_register_point(self):#to register
-    self.fourUp()
+  def execute_rigid_registration(self):#to register
+    self.identify_superior_fiducials()
 
     stan=self.comStandLocation() 
 
-    self.showStandPoints(stan) 
+    self.render_theoretical_fiducials(stan) 
 
-    if self.fourPoints is None :
+    if self.registration_markers is None :
       slicer.util.messageBox("Please Select 4 Points")
       return
-    n = self.fourPoints.GetNumberOfControlPoints()
+    n = self.registration_markers.GetNumberOfControlPoints()
     if n != 4:
       slicer.util.messageBox("Please Select 4 Points")
       return
@@ -367,7 +397,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     for i in range(4):
       ras = vtk.vtkVector3d(0,0,0)
-      self.fourPoints.GetNthControlPointPositionWorld(i,ras)
+      self.registration_markers.GetNthControlPointPositionWorld(i,ras)
       fromPointsOrdered.InsertPoint(i, ras)
       toPointsOrdered.InsertPoint(i, stan[i])
 
@@ -383,11 +413,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     calculatedTransform = vtk.vtkMatrix4x4()
     landmarkTransform.GetMatrix(calculatedTransform)
 
-    self.outputTransformNode = slicer.mrmlScene.GetFirstNodeByName("pTrans")
+    self.outputTransformNode = slicer.mrmlScene.GetFirstNodeByName("ATStereo_RegistrationTransform")
     if(self.outputTransformNode is None):
-      self.outputTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "pTrans")
+      self.outputTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "ATStereo_RegistrationTransform")
     self.outputTransformNode.SetMatrixTransformToParent(calculatedTransform)
-    self.fourPoints.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
+    self.registration_markers.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
 
     leksell = self.ui.ctDataSelector.currentNode()
     if leksell:
@@ -490,9 +520,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     landmarkTransform.GetMatrix(calculatedTransform)
 
     # 4. Apply to output node
-    self.outputTransformNode = slicer.mrmlScene.GetFirstNodeByName("pTrans")
+    self.outputTransformNode = slicer.mrmlScene.GetFirstNodeByName("ATStereo_RegistrationTransform")
     if self.outputTransformNode is None:
-      self.outputTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "pTrans")
+      self.outputTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "ATStereo_RegistrationTransform")
     self.outputTransformNode.SetMatrixTransformToParent(calculatedTransform)
 
     self.isocenterPoints.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
@@ -538,8 +568,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.messageBox(f"Alignment complete! (RMSE = {rms_error} mm)")
 
   def hidePoints(self):
-    node1= self.fourPoints
-    node2= self.sPoints
+    node1= self.registration_markers
+    node2= self.theoretical_fiducials
     if node1 and node2:
       node1.GetDisplayNode().SetVisibility(0)
       node2.GetDisplayNode().SetVisibility(0)
@@ -548,23 +578,23 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def on_add_target_point_left(self):
       self.hidePoints()
-      self.plans["left"]["target"] = self.createPlanPointNode("targetPointLeft", "t_left")
+      self.trajectory_targets["left"]["target"] = self.createPlanPointNode("targetPointLeft", "t_left")
     
 
   def on_add_entry_point_left(self):
-      self.plans["left"]["entry"] = self.createPlanPointNode("entryPointLeft", "e_left")
+      self.trajectory_targets["left"]["entry"] = self.createPlanPointNode("entryPointLeft", "e_left")
 
   def on_add_target_point_right(self):
       self.hidePoints()
-      self.plans["right"]["target"] = self.createPlanPointNode("targetPointRight", "t_right")
+      self.trajectory_targets["right"]["target"] = self.createPlanPointNode("targetPointRight", "t_right")
 
   def on_add_entry_point_right(self):
-      self.plans["right"]["entry"] = self.createPlanPointNode("entryPointRight", "e_right")
+      self.trajectory_targets["right"]["entry"] = self.createPlanPointNode("entryPointRight", "e_right")
 
   
   def newPlan(self):
     for side in ["left", "right"]:
-        tube = self.plans[side]["tubeModel"]
+        tube = self.trajectory_targets[side]["tubeModel"]
         if tube is not None:
             self.sc.addPlan(tube)
 
@@ -586,7 +616,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.checkTrajectorySeparation()
 
   def updatePlanResult(self, side):
-    plan = self.plans[side]
+    plan = self.trajectory_targets[side]
     target = plan["target"]
     entry = plan["entry"]
 
@@ -674,7 +704,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def computeDualArcResult(self, side, target_ras, entry_ras=None):
     
-    iso = self.plans[side]["isocenter"]
+    iso = self.trajectory_targets[side]["isocenter"]
     if entry_ras is None:
         self.setupDataProbecoordinates(target_ras[0], target_ras[1], target_ras[2])
     else:
@@ -769,8 +799,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def checkTrajectorySeparation(self, minDistanceMm=5.0):
-    left = self.plans["left"]
-    right = self.plans["right"]
+    left = self.trajectory_targets["left"]
+    right = self.trajectory_targets["right"]
 
     if not left["entry"] or not left["target"] or not right["entry"] or not right["target"]:
         return
@@ -799,8 +829,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     ##observe 4 points
   
   def observeFourPoints(self):# 
-      self.fourPoints = slicer.mrmlScene.GetFirstNodeByName("pointset")
-      node=self.fourPoints
+      self.registration_markers = slicer.mrmlScene.GetFirstNodeByName("pointset")
+      node=self.registration_markers
       if node:
         n = node.GetNumberOfControlPoints()
         interactionNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLInteractionNode")
@@ -813,7 +843,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ras = vtk.vtkVector3d(0,0,0)
             node.GetNthControlPointPositionWorld(i,ras)
             nodeVtkPoints.InsertPoint(i, ras)
-          _,nodeListPoints=self.changeOrder(nodeVtkPoints)
+          _,nodeListPoints=self.sort_fiducials_anatomically(nodeVtkPoints)
           node.RemoveAllControlPoints()
           node.GetDisplayNode().SetGlyphType(2)
           name=["    a","    b","    c","    d"]
@@ -825,7 +855,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.observeFourPoints()
 
   def updatePlanTube(self, side):
-    plan = self.plans[side]
+    plan = self.trajectory_targets[side]
 
     if not plan["target"] or not plan["entry"]:
         return
@@ -856,13 +886,13 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def observerStartMove(self, caller, event):
     for side in ["left", "right"]:
-        tube = self.plans[side]["tubeModel"]
+        tube = self.trajectory_targets[side]["tubeModel"]
         if tube is not None:
             tube.GetDisplayNode().SetVisibility(0)
  
   def observerEndMove(self, caller, event):
     for side in ["left", "right"]:
-        tube = self.plans[side]["tubeModel"]
+        tube = self.trajectory_targets[side]["tubeModel"]
         if tube is not None:
             tube.GetDisplayNode().SetVisibility(1)
     self.syncPlan()
@@ -907,7 +937,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.applyPlanTransform("right")
 
   def loadPlanModels(self, side, supportFile, sliderFile, arcFile, boxFile, pathFile, axialFile):
-      plan = self.plans[side]
+      plan = self.trajectory_targets[side]
 
       if plan["supportModel"] is None:
           plan["supportModel"] = slicer.util.loadModel(self.resourcePath(f'frame/{supportFile}'))
@@ -933,33 +963,33 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
           plan["axialModel"] = slicer.util.loadModel(self.resourcePath(f'frame/{axialFile}'))
           plan["axialModel"].SetName(f"Axial_{side}")
 
-      if plan["supportTranNode"] is None:
-          plan["supportTranNode"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"supportTran_{side}")
+      if plan["ATStereo_X_DriveTransform"] is None:
+          plan["ATStereo_X_DriveTransform"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"supportTran_{side}")
 
-      if plan["sliderTranNode"] is None:
-          plan["sliderTranNode"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"sliderTran_{side}")
+      if plan["ATStereo_Y_DriveTransform"] is None:
+          plan["ATStereo_Y_DriveTransform"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"sliderTran_{side}")
 
-      if plan["arcTranNode"] is None:
-          plan["arcTranNode"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"arcTran_{side}")
+      if plan["ATStereo_Z_DriveTransform"] is None:
+          plan["ATStereo_Z_DriveTransform"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"arcTran_{side}")
 
-      if plan["boxTranNode"] is None:
-          plan["boxTranNode"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"boxTran_{side}")
+      if plan["ATStereo_RingMountTransform"] is None:
+          plan["ATStereo_RingMountTransform"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"boxTran_{side}")
 
-      if plan["pathTranNode"] is None:
-          plan["pathTranNode"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"pathTran_{side}")
+      if plan["ATStereo_TrajectoryGuideTransform"] is None:
+          plan["ATStereo_TrajectoryGuideTransform"] = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", f"pathTran_{side}")
 
-      plan["supportModel"].SetAndObserveTransformNodeID(plan["supportTranNode"].GetID())
-      plan["sliderModel"].SetAndObserveTransformNodeID(plan["sliderTranNode"].GetID())
-      plan["arcModel"].SetAndObserveTransformNodeID(plan["arcTranNode"].GetID())
-      plan["boxModel"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())
-      plan["pathModel"].SetAndObserveTransformNodeID(plan["pathTranNode"].GetID())
-      # plan["axialModel"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())  # Commented out to keep axial fixed in place
+      plan["supportModel"].SetAndObserveTransformNodeID(plan["ATStereo_X_DriveTransform"].GetID())
+      plan["sliderModel"].SetAndObserveTransformNodeID(plan["ATStereo_Y_DriveTransform"].GetID())
+      plan["arcModel"].SetAndObserveTransformNodeID(plan["ATStereo_Z_DriveTransform"].GetID())
+      plan["boxModel"].SetAndObserveTransformNodeID(plan["ATStereo_RingMountTransform"].GetID())
+      plan["pathModel"].SetAndObserveTransformNodeID(plan["ATStereo_TrajectoryGuideTransform"].GetID())
+      # plan["axialModel"].SetAndObserveTransformNodeID(plan["ATStereo_RingMountTransform"].GetID())  # Commented out to keep axial fixed in place
 
       # hierarchy
-      plan["sliderTranNode"].SetAndObserveTransformNodeID(plan["supportTranNode"].GetID())
-      plan["arcTranNode"].SetAndObserveTransformNodeID(plan["sliderTranNode"].GetID())
-      plan["boxTranNode"].SetAndObserveTransformNodeID(plan["arcTranNode"].GetID())
-      plan["pathTranNode"].SetAndObserveTransformNodeID(plan["boxTranNode"].GetID())
+      plan["ATStereo_Y_DriveTransform"].SetAndObserveTransformNodeID(plan["ATStereo_X_DriveTransform"].GetID())
+      plan["ATStereo_Z_DriveTransform"].SetAndObserveTransformNodeID(plan["ATStereo_Y_DriveTransform"].GetID())
+      plan["ATStereo_RingMountTransform"].SetAndObserveTransformNodeID(plan["ATStereo_Z_DriveTransform"].GetID())
+      plan["ATStereo_TrajectoryGuideTransform"].SetAndObserveTransformNodeID(plan["ATStereo_RingMountTransform"].GetID())
 
   def onImportFiles(self):
     """Open a file dialog to select one or more NIfTI files to load."""
@@ -1056,7 +1086,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def _arcPivotTransform(self, side, arc_value):
     """Create a transform that rotates around the side's isocenter by arc_value degrees (Y axis)."""
-    px, py, pz = self.plans[side]["isocenter"]
+    px, py, pz = self.trajectory_targets[side]["isocenter"]
     t = vtk.vtkTransform()
     t.Translate(px, py, pz)
     t.RotateY(arc_value)
@@ -1065,16 +1095,16 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def _ringPivotTransform(self, side, ring_value):
     """Create a transform that rotates around the side's isocenter by ring_value degrees (X axis)."""
-    px, py, pz = self.plans[side]["isocenter"]
+    px, py, pz = self.trajectory_targets[side]["isocenter"]
     t = vtk.vtkTransform()
     t.Translate(px, py, pz)
     t.RotateX(360-ring_value)
     t.Translate(-px, -py, -pz)
     return t
 
-  def pRotateSide(self, side):
-    plan = self.plans[side]
-    if plan["boxTranNode"] is None:
+  def compute_arc_kinematics(self, side):
+    plan = self.trajectory_targets[side]
+    if plan["ATStereo_RingMountTransform"] is None:
         return
 
     if side == "left":
@@ -1083,11 +1113,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         arc_value = self.ui.rightArcSlicer.value
 
     boxTransform = self._arcPivotTransform(side, arc_value)
-    plan["boxTranNode"].SetMatrixTransformToParent(boxTransform.GetMatrix())
+    plan["ATStereo_RingMountTransform"].SetMatrixTransformToParent(boxTransform.GetMatrix())
 
-  def ringRotateSide(self, side):
-    plan = self.plans[side]
-    if plan["arcTranNode"] is None:
+  def compute_ring_kinematics(self, side):
+    plan = self.trajectory_targets[side]
+    if plan["ATStereo_Z_DriveTransform"] is None:
         return
 
     if side == "left":
@@ -1112,12 +1142,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     arcTransform.Translate(px, py, pz)
     arcTransform.RotateX(360-ring_value)
     arcTransform.Translate(-px, -py, -pz)
-    plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
+    plan["ATStereo_Z_DriveTransform"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
   def axyzRotateSide(self, side):
-    plan = self.plans[side]
+    plan = self.trajectory_targets[side]
 
-    if plan["sliderTranNode"] is None:
+    if plan["ATStereo_Y_DriveTransform"] is None:
         return
     if plan["basePosition"] is None:
         return
@@ -1136,12 +1166,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     sliderTransform = vtk.vtkTransform()
     sliderTransform.Translate(0, gy - baseY, 0)
-    plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
+    plan["ATStereo_Y_DriveTransform"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
 
 
   def slider_transform(self, side):
-    plan = self.plans[side]
-    if plan["sliderTranNode"] is None or plan["supportTranNode"] is None:
+    plan = self.trajectory_targets[side]
+    if plan["ATStereo_Y_DriveTransform"] is None or plan["ATStereo_X_DriveTransform"] is None:
         return
 
     if side == "left":
@@ -1157,7 +1187,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     supportTransform = vtk.vtkTransform()
     supportTransform.Translate(0.0, 0.0, -z)
-    plan["supportTranNode"].SetMatrixTransformToParent(supportTransform.GetMatrix())
+    plan["ATStereo_X_DriveTransform"].SetMatrixTransformToParent(supportTransform.GetMatrix())
 
     arcTransform = vtk.vtkTransform()
     if side == "left":
@@ -1175,22 +1205,22 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     arcTransform.RotateX(360-ring_value)
     arcTransform.Translate(-px, -py, -pz)
     
-    plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
+    plan["ATStereo_Z_DriveTransform"].SetMatrixTransformToParent(arcTransform.GetMatrix())
     # Update slider transform (Y local axis)
     slider_y = max(-60.0, min(120.0, y))
     sliderTransform = vtk.vtkTransform()
     sliderTransform.Translate(0.0, slider_y, 0.0)
-    plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
+    plan["ATStereo_Y_DriveTransform"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
     
   def applyPlanTransform(self, side):
-    plan = self.plans[side]
+    plan = self.trajectory_targets[side]
     result = plan["result"]
 
     if result is None:
         return
-    if plan["supportTranNode"] is None or plan["sliderTranNode"] is None:
+    if plan["ATStereo_X_DriveTransform"] is None or plan["ATStereo_Y_DriveTransform"] is None:
         return
-    if plan["arcTranNode"] is None or plan["boxTranNode"] is None or plan["pathTranNode"] is None:
+    if plan["ATStereo_Z_DriveTransform"] is None or plan["ATStereo_RingMountTransform"] is None or plan["ATStereo_TrajectoryGuideTransform"] is None:
         return
 
     x = result["x"]
@@ -1206,12 +1236,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     # support moves along Z axis only
     supportTransform = vtk.vtkTransform()
     supportTransform.Translate(0.0, 0.0, z)
-    plan["supportTranNode"].SetMatrixTransformToParent(supportTransform.GetMatrix())
+    plan["ATStereo_X_DriveTransform"].SetMatrixTransformToParent(supportTransform.GetMatrix())
 
     # slider moves along Y axis only
     sliderTransform = vtk.vtkTransform()
     sliderTransform.Translate(0.0, y, 0.0)
-    plan["sliderTranNode"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
+    plan["ATStereo_Y_DriveTransform"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
 
     # arc: ring rotation with pivot at slider attachment AND sliding along X
     if side == "left":
@@ -1234,7 +1264,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     arcTransform.Translate(px, py, pz)
     arcTransform.RotateX(360 - ring_value)
     arcTransform.Translate(-px, -py, -pz)
-    plan["arcTranNode"].SetMatrixTransformToParent(arcTransform.GetMatrix())
+    plan["ATStereo_Z_DriveTransform"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
     # box: arc angle rotation around isocenter pivot
     arc_value = max(0.0, min(360.0, arc))
@@ -1242,11 +1272,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         arc_value = -arc_value
 
     boxTransform = self._arcPivotTransform(side, arc_value)
-    plan["boxTranNode"].SetMatrixTransformToParent(boxTransform.GetMatrix())
+    plan["ATStereo_RingMountTransform"].SetMatrixTransformToParent(boxTransform.GetMatrix())
 
     # path: identity — follows box as child in hierarchy
     pathTransform = vtk.vtkTransform()
-    plan["pathTranNode"].SetMatrixTransformToParent(pathTransform.GetMatrix())
+    plan["ATStereo_TrajectoryGuideTransform"].SetMatrixTransformToParent(pathTransform.GetMatrix())
 
     # Apply manual slider adjustments on top or refresh UI state
     self.slider_transform(side)
@@ -1261,8 +1291,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   def lockPlan(self):
     for side in ["left", "right"]:
-        target = self.plans[side]["target"]
-        entry = self.plans[side]["entry"]
+        target = self.trajectory_targets[side]["target"]
+        entry = self.trajectory_targets[side]["entry"]
 
         if target is not None:
             target.SetLocked(1 - target.GetLocked())
@@ -1272,8 +1302,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   # Data probe - capture mouse move on 3D view
   def setupDataProbecoordinates(self, x, y, z):
-    left_iso = self.plans["left"]["isocenter"]
-    right_iso = self.plans["right"]["isocenter"]
+    left_iso = self.trajectory_targets["left"]["isocenter"]
+    right_iso = self.trajectory_targets["right"]["isocenter"]
     
     if x<0:
         x = x - left_iso[0]
