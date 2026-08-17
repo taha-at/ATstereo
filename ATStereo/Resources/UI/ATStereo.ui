@@ -35,62 +35,70 @@
   <property name="styleSheet">
    <string notr="true">
 QWidget {
-    background-color: palette(window);
-    color: palette(window-text);
+    background-color: #1a2d55;
+    color: #e0e6ed;
 }
 
 QGroupBox {
-    font: 75 12pt "Times New Roman";
-    color: palette(window-text);
-    background-color: palette(window);
-    border: 1px solid palette(mid);
-    border-radius: 8px;
-    margin-top: 10px;
-    padding-top: 12px;
+    font: 10pt &quot;Times New Roman&quot;;
+    color: #ffffff;
+    background-color: #111d36;
+    border: 1px solid #2b4273;
+    border-radius: 6px;
+    margin-top: 8px;
+    padding-top: 10px;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 5px 0 5px;
+    left: 8px;
+    padding: 0 4px;
+    color: #8ab4f8;
 }
 
 QPushButton {
-    background-color: palette(button);
-    color: palette(button-text);
-    border: 1px solid palette(mid);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font: 75 12pt "Times New Roman";
+    background-color: #233a6b;
+    color: #ffffff;
+    border: 1px solid #2b4273;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: 10pt &quot;Times New Roman&quot;;
 }
 
 QPushButton:hover {
-    border: 1px solid palette(highlight);
+    background-color: #2d4a87;
+    border: 1px solid #4a76c9;
 }
 
-QPushButton:checked {
-    background-color: palette(highlight);
-    color: palette(highlighted-text);
+QPushButton:pressed, QPushButton:checked {
+    background-color: #3a5ea8;
+    border: 1px solid #5c8cf2;
+    color: #ffffff;
 }
 
 QLineEdit {
-    background-color: palette(base);
-    color: palette(text);
-    border: 1px solid palette(mid);
+    background-color: #0f1a30;
+    color: #ffffff;
+    border: 1px solid #2b4273;
     border-radius: 4px;
-    padding: 4px;
-    font: 10pt "Times New Roman";
+    padding: 2px 4px;
+    font: 10pt &quot;Times New Roman&quot;;
+}
+
+QLineEdit:focus {
+    border: 1px solid #8ab4f8;
 }
 
 QLabel {
-    color: palette(window-text);
-    font: 10pt "Times New Roman";
+    background-color: transparent;
+    color: #e0e6ed;
+    font: 10pt &quot;Times New Roman&quot;;
 }
 
 QFrame {
-    background-color: palette(alternate-base);
-    border: 1px solid palette(mid);
-    border-radius: 6px;
+    background-color: #111d36;
+    border: 1px solid #2b4273;
+    border-radius: 4px;
 }
    </string>
   </property>

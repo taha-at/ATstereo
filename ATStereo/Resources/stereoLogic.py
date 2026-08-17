@@ -76,12 +76,12 @@ class stereoLogic:
 
         self.vtkTube.SetHeight(height)
 
-        default_direction = np.array([0, 1, 0])  # VTK 默认方向是 Y 轴
+        default_direction = np.array([0, 1, 0])  # VTK default direction is Y axis
         rotation_axis = np.cross(default_direction, direction)
         angle = np.arccos(np.dot(default_direction, direction)) * 180.0 / np.pi
 
-        self.transform.Identity()  # 重置变换
-        self.transform.Translate(*center)  # 先平移
+        self.transform.Identity()  # Reset transform
+        self.transform.Translate(*center)  # Translate first
         if np.linalg.norm(rotation_axis) > 1e-6:
             self.transform.RotateWXYZ(angle, *rotation_axis)
 
@@ -102,36 +102,36 @@ class stereoLogic:
 
 
     def kabsch(self,P,Q):
-        # Kabsch 算法
-        # 步骤 1: 计算质心
-        P_centroid = np.mean(P, axis=0)  # 源点集质心
-        Q_centroid = np.mean(Q, axis=0)  # 目标点集质心
+        # Kabsch algorithm
+        # Step 1: Compute centroid
+        P_centroid = np.mean(P, axis=0)  # Source point set centroid
+        Q_centroid = np.mean(Q, axis=0)  # Target point set centroid
 
-        # 步骤 2: 中心化
+        # Step 2: Center
         P_centered = P - P_centroid  # (4, 3)
         Q_centered = Q - Q_centroid  # (4, 3)
 
-        # 步骤 3: 计算协方差矩阵 H
+        # Step 3: Compute covariance matrix H
         H = P_centered.T @ Q_centered  # (3, 3)
 
-        # 步骤 4: 奇异值分解 (SVD)
+        # Step 4: Singular Value Decomposition (SVD)
         U, _, Vt = np.linalg.svd(H)  # U (3, 3), Vt (3, 3)
 
-        # 步骤 5: 计算旋转矩阵 R
-        d = np.sign(np.linalg.det(Vt.T @ U.T))  # 确保旋转矩阵行列式为正
-        D = np.eye(3)  # 单位矩阵
-        D[2, 2] = d    # 调整行列式
-        R = Vt.T @ D @ U.T  # 旋转矩阵 (3, 3)
+        # Step 5: Compute rotation matrix R
+        d = np.sign(np.linalg.det(Vt.T @ U.T))  # Ensure determinant of rotation matrix is positive
+        D = np.eye(3)  # Identity matrix
+        D[2, 2] = d    # Adjust determinant
+        R = Vt.T @ D @ U.T  # Rotation matrix (3, 3)
 
-        # 步骤 6: 计算平移向量 t
+        # Step 6: Compute translation vector t
         t = Q_centroid - R @ P_centroid  # (3,)
 
-        # 构建 4x4 变换矩阵
+        # Build 4x4 transformation matrix
         calculatedTransform = vtk.vtkMatrix4x4()
         for i in range(3):
             for j in range(3):
-                calculatedTransform.SetElement(i, j, R[i, j])  # 设置旋转部分
-            calculatedTransform.SetElement(i, 3, t[i])        # 设置平移部分
+                calculatedTransform.SetElement(i, j, R[i, j])  # Set rotation part
+            calculatedTransform.SetElement(i, 3, t[i])        # Set translation part
         calculatedTransform.SetElement(3, 3, 1)   
 
         return calculatedTransform

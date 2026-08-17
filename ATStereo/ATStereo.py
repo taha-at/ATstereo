@@ -1074,7 +1074,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.app.restoreOverrideCursor()
 
   def loadTestCt(self):
-     ctPath=self.resourcePath('ctData/test_CT.nrrd')
+     ctPath=self.resourcePath('ctData/Test.nrrd')
      node = slicer.util.loadVolume(ctPath)
      if node:
          slicer.modules.volumes.logic().CenterVolume(node)
