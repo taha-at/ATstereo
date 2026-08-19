@@ -1,13 +1,17 @@
 # ==============================================================================
 # ATStereo Module
-# 
-# NOTICE: The stereotactic frame geometry and associated methodologies 
-# implemented in this software are protected by patents. 
-# 
-# This software is provided strictly for academic, research, and non-commercial 
-# use ONLY. Any commercial use, manufacturing, sale, or distribution is 
-# strictly prohibited.
-# 
+# Copyright (c) 2026 Abdelrahman Taha and Ahmed Abdelwahab
+#
+# PATENT NOTICE: The stereotactic frame geometry and associated methodologies
+# implemented in this software are protected by patents.
+#
+# This software is licensed for academic and non-commercial research use ONLY.
+# Commercial use, manufacturing, sale, or distribution is strictly prohibited
+# without prior written permission from the authors.
+# See the LICENSE file in the root of this repository for full terms.
+#
+# Portions of this software are derived from BrainStereo (MIT License).
+# See LICENSE for the full BrainStereo copyright notice and terms.
 # ==============================================================================
 
 import os
@@ -26,10 +30,10 @@ class ATStereo(ScriptedLoadableModule):
     ScriptedLoadableModule.__init__(self, parent)
     self.parent.title = "ATStereo" 
     self.parent.categories = ["Neurosurgery"] 
-    self.parent.contributors = ["HackerOne"]  
+    self.parent.contributors = ["taha-at"]  
     self.parent.helpText = """
     <b>ATStereo</b><br>
-    https://github.com/Hacker1one/ATstereo<br><br>
+    https://github.com/taha-at/ATstereo<br><br>
     <b>NOTICE:</b> The frame geometry is patented. This software is restricted to 
     academic and non-commercial research use only. Commercial use is prohibited.
     """
@@ -718,9 +722,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
 
     if side == "left":
-        local_x = -t[0]
-    else:
         local_x = t[0]
+    else:
+        local_x = -t[0]
 
     local_y = t[1]
     local_z = t[2]
@@ -744,11 +748,13 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             return None
 
         # Arc angle: from X axis (Globocentric)
-        val_arc = max(-1.0, min(1.0, a[0] / A))
+        if side == "right":
+            val_arc = max(-1.0, min(1.0, -a[0] / A))
+        else:
+            val_arc = max(-1.0, min(1.0, a[0] / A))
         arc = 90.0 - math.degrees(math.acos(val_arc))
-        arc = max(0.0, min(360.0, abs(arc)))
-        
-        
+        arc = max(-10.0, min(60.0, (arc)))
+                
         diffZ = abs(t[2]) - abs(e[2])
         # Ring angle: computed from Y/Z plane with quadrant logic (Globocentric)
         if abs(a[1]) < 1e-12:
@@ -758,24 +764,24 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
         if a[2] == 0:
             if a[1] > 0:
-                ring = 90.0
-            else:
                 ring = 270.0
+            else:
+                ring = 90.0
         elif a[1] == 0:
             if diffZ > 0:
-                ring = 180.0
+                ring = 0.0
             else:
-                ring = 0
+                ring = 180.0
         elif diffZ > 0:
             if a[1] > 0:
-                ring = 90.0 - alpha_y
-            else:
                 ring = 270.0 + alpha_y
+            else:
+                ring = 90.0 - alpha_y
         elif diffZ < 0:
             if a[1] < 0:
-                ring = 270.0 - alpha_y
-            else:
                 ring = 90.0 + alpha_y 
+            else:
+                ring = 270.0 - alpha_y
         else:
             ring = 0.0
         
@@ -786,7 +792,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             
         local_z = max(0.0, min(120.0, -t[2]))
     else:
-        arc = 30.0
+        arc = 0.0
         ring = 0.0
 
     return {
@@ -794,7 +800,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "y": round(local_y, 2),
         "z": round(local_z, 2),
         "arc": round(arc, 2),
-        "ring": round(360 - ring, 2),
+        "ring": round(ring, 2),
     }
 
 
@@ -907,19 +913,59 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.rightRing.setText("0")
 
     self.ui.left_final_x.setText("0")
-    self.ui.left_final_y.setText("-60")
+    self.ui.left_final_y.setText("0")  
     self.ui.left_final_z.setText("0")
 
     self.ui.right_final_x.setText("0")
-    self.ui.right_final_y.setText("-60")
+    self.ui.right_final_y.setText("0")
     self.ui.right_final_z.setText("0")
 
     self.ui.errortext.setText("0")
     self.ui.distanceText.setText("0")
 
-    self.ui.leftArcSlicer.setValue(-60)
-    self.ui.rightArcSlicer.setValue(-60)
+    self.ui.leftArcSlicer.setValue(0)
+    self.ui.rightArcSlicer.setValue(0)
     self.ui.depthEdit.setText("120")
+    
+    # Block signals for BOTH sides
+    self.ui.rightLocalXSlicer.blockSignals(True)
+    self.ui.rightLocalYSlicer.blockSignals(True)
+    self.ui.rightLocalZSlicer.blockSignals(True)
+    self.ui.rightRingSlicer.blockSignals(True)
+    self.ui.rightArcSlicer.blockSignals(True)
+
+    self.ui.leftLocalXSlicer.blockSignals(True)
+    self.ui.leftLocalYSlicer.blockSignals(True)
+    self.ui.leftLocalZSlicer.blockSignals(True)
+    self.ui.leftRingSlicer.blockSignals(True)
+    self.ui.leftArcSlicer.blockSignals(True)
+
+    # Set values to 0
+    self.ui.rightLocalXSlicer.value = 0
+    self.ui.rightLocalYSlicer.value = 0
+    self.ui.rightLocalZSlicer.value = 0
+    self.ui.rightRingSlicer.value = 0
+    self.ui.rightArcSlicer.value = 0
+
+    self.ui.leftLocalXSlicer.value = 0
+    self.ui.leftLocalYSlicer.value = 0
+    self.ui.leftLocalZSlicer.value = 0
+    self.ui.leftRingSlicer.value = 0
+    self.ui.leftArcSlicer.value = 0
+
+    # Unblock signals for BOTH sides
+    self.ui.rightLocalXSlicer.blockSignals(False)
+    self.ui.rightLocalYSlicer.blockSignals(False)
+    self.ui.rightLocalZSlicer.blockSignals(False)
+    self.ui.rightRingSlicer.blockSignals(False)
+    self.ui.rightArcSlicer.blockSignals(False)
+
+    self.ui.leftLocalXSlicer.blockSignals(False)
+    self.ui.leftLocalYSlicer.blockSignals(False)
+    self.ui.leftLocalZSlicer.blockSignals(False)
+    self.ui.leftRingSlicer.blockSignals(False)
+    self.ui.leftArcSlicer.blockSignals(False)
+
 
 
 #######################################################################################  For Simulation
@@ -1267,10 +1313,10 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     plan["ATStereo_Z_DriveTransform"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
     # box: arc angle rotation around isocenter pivot
-    arc_value = max(0.0, min(360.0, arc))
+    arc_value = max(-10.0, min(60.0, arc))
     if side == "left":
         arc_value = -arc_value
-
+        
     boxTransform = self._arcPivotTransform(side, arc_value)
     plan["ATStereo_RingMountTransform"].SetMatrixTransformToParent(boxTransform.GetMatrix())
 

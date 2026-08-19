@@ -1,3 +1,32 @@
+ATStereo - Academic Non-Commercial License
+Copyright (c) 2026 Abdelrahman Taha and Ahmed Abdelwahab
+Repository: https://github.com/taha-at/ATstereo
+
+This license applies to the ATStereo software package as a whole, as well as 
+all original files, additions, and modifications made by the Authors (Abdelrahman Taha and Ahmed Abdelwahab).
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use, 
+copy, and modify the Software solely for personal, academic, or non-commercial 
+research purposes. 
+
+COMMERCIAL USE, DISTRIBUTION, OR SALE OF THIS SOFTWARE IS STRICTLY PROHIBITED 
+WITHOUT PRIOR WRITTEN PERMISSION FROM THE AUTHORS. For the avoidance of doubt, 
+this restriction applies to the entire integrated ATStereo package and any derivative works.
+Anyone redistributing this software must retain this entire LICENSE file.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---------------------------------------------------------------------------
+Portions of this software are derived from BrainStereo, 
+which is licensed under the MIT License:
+
 MIT License
 
 Copyright (c) 2025 Dr_Agent
