@@ -61,6 +61,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ctDataSelector.setMRMLScene(slicer.mrmlScene)
     self.ui.btn_clear.connect('clicked(bool)', self.reset)
     
+    self.ui.registerFrameButton.connect('clicked(bool)', self.onRegisterFrameClicked)
     #transform - per-side arc angle and ring sliders
     self.ui.leftArcSlicer.valueChanged.connect(lambda: self.compute_arc_kinematics("left"))
     self.ui.leftRingSlicer.valueChanged.connect(lambda: self.compute_ring_kinematics("left"))
@@ -75,7 +76,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.visualizePlanBtn.connect('clicked(bool)', self.loadFrame)
     self.ui.visualizeFrameBtn.connect('clicked(bool)', self.visualFrame)
     self.ui.lockPlanBtn.connect('clicked(bool)', self.lockPlan)
-    #self.ui.realTImeBtn.connect('clicked(bool)', self.realTimeTrac)
 
     self.ui.showBtn.connect('clicked(bool)', self.volumeRender)
     self.ui.ctDataSelector.connect('currentNodeChanged(vtkMRMLNode*)', self.onVolumeChanged)
@@ -112,6 +112,11 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     self.interactor.AddObserver('MouseMoveEvent', self.onMouseMove)
     self.onVolumeChanged()
+
+  def onRegisterFrameClicked(self):
+      """Triggered by the UI registerFrameButton to run tracking and register."""
+      self.autodetect_frame_markers()
+      slicer.util.showStatusMessage("Frame registered and RMSE logged!", 3000)
 
   def cleanup(self):
     self.removeObservers()
@@ -156,8 +161,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.isocenterPoints = None
     self.outputTransformNode = None
     self.frameModel = None
-    self.realTimeVis = False
-
+    self.sliderVis = False
+    
+    self.pointNodeObservers = []
     self.trajectory_targets = {
         "left": {
             "target": None,
@@ -461,7 +467,22 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
        slicer.util.warningDisplay("The error is too large. Please re-register.", windowTitle="Warning")
 
     self.ui.errortext.setText(str(rms_error))
-  
+
+    # --- CSV LOGGING ---
+    import csv, datetime, os
+    csv_path = "/Users/abdelrahmantaha/Desktop/ATStereo_Phase1_RMSE.csv"
+    file_exists = os.path.isfile(csv_path)
+    try:
+        with open(csv_path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(["Timestamp", "RMSE", "Points_Used"])
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writer.writerow([timestamp, rms_error, num_points])
+            print(f"Logged RMSE: {rms_error} to {csv_path}")
+    except Exception as e:
+        print(f"Failed to log RMSE to CSV: {e}")
+    # -------------------
   def on_pick_isocenters(self):
     self.max2D()
     self.isocenterPoints = slicer.mrmlScene.GetFirstNodeByName("Isocenters")
@@ -610,9 +631,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     elif actor in ["t_right", "e_right"]:
         self.updatePlan("right")
 
-    if self.realTimeVis:
-        self.loadFrame()
-
   def updatePlan(self, side):
     self.updatePlanResult(side)
     self.updatePlanTube(side)
@@ -656,6 +674,14 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     result = plan["result"]
     if result is None:
         return
+
+    warnings = result.get("warnings", [])
+    if warnings:
+        warn_text = f"LIMIT EXCEEDED ({side.upper()}): " + ", ".join(warnings)
+        print(warn_text)
+        slicer.util.showStatusMessage(warn_text, 3000)
+    else:
+        slicer.util.showStatusMessage("", 0)
 
     if side == "left":
         self.ui.left_final_x.setText(str(result["x"]))
@@ -729,10 +755,23 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     local_y = t[1]
     local_z = t[2]
 
+    LIMITS = {
+        "x": {"min": 0, "max": 100},
+        "y": {"min": -60, "max": 120},
+        "z": {"min": 0, "max": 120},
+        "arc": {"min": -10, "max": 60},
+        "ring": {"min": 0, "max": 360}
+    }
+    warnings = []
 
-    local_x = max(0.0, min(100.0, local_x))
-    local_y = max(-60.0, min(120.0, local_y))
-    local_z = max(0.0, min(120.0, local_z))
+    def check_and_clamp(val, param):
+        if val < LIMITS[param]["min"] or val > LIMITS[param]["max"]:
+            warnings.append(f"{param.capitalize()} out of bounds: {val:.1f}")
+        return max(LIMITS[param]["min"], min(LIMITS[param]["max"], val))
+
+    local_x = check_and_clamp(local_x, "x")
+    local_y = check_and_clamp(local_y, "y")
+    local_z = check_and_clamp(-local_z, "z")
 
     if entry_ras is not None:
         e = np.array([
@@ -753,7 +792,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         else:
             val_arc = max(-1.0, min(1.0, a[0] / A))
         arc = 90.0 - math.degrees(math.acos(val_arc))
-        arc = max(-10.0, min(60.0, (arc)))
+        arc = check_and_clamp(arc, "arc")
                 
         diffZ = abs(t[2]) - abs(e[2])
         # Ring angle: computed from Y/Z plane with quadrant logic (Globocentric)
@@ -786,11 +825,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
             ring = 0.0
         
         if side == "left":
-            local_x = max(0.0, min(100.0, t[0]))
+            local_x = check_and_clamp(t[0], "x")
         else:
-            local_x = max(0.0, min(100.0, -t[0]))
+            local_x = check_and_clamp(-t[0], "x")
             
-        local_z = max(0.0, min(120.0, -t[2]))
+        local_z = check_and_clamp(-t[2], "z")
+        ring = check_and_clamp(ring, "ring")
     else:
         arc = 0.0
         ring = 0.0
@@ -801,6 +841,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         "z": round(local_z, 2),
         "arc": round(arc, 2),
         "ring": round(ring, 2),
+        "warnings": warnings
     }
 
 
@@ -1120,13 +1161,15 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.app.restoreOverrideCursor()
 
   def loadTestCt(self):
-     ctPath=self.resourcePath('ctData/Test.nrrd')
-     node = slicer.util.loadVolume(ctPath)
-     if node:
-         slicer.modules.volumes.logic().CenterVolume(node)
-     self.ui.ctDataSelector.setCurrentNode(slicer.util.getNode("test_CT"))
+    """This function loads the test CT data."""
+    ctPath=self.resourcePath('ctData/Test.nrrd')
+    node = slicer.util.loadVolume(ctPath)
+    if node:
+        slicer.modules.volumes.logic().CenterVolume(node)
+        self.ui.ctDataSelector.setCurrentNode(node)
 
   def syncPlan(self):
+    """This function syncs the plan between the left and right trajectories."""
     for side in ["left", "right"]:
         self.applyPlanTransform(side)
 
@@ -1149,6 +1192,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     return t
 
   def compute_arc_kinematics(self, side):
+    """This function computes the arc kinematics for the trajectory targets."""
     plan = self.trajectory_targets[side]
     if plan["ATStereo_RingMountTransform"] is None:
         return
@@ -1162,6 +1206,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     plan["ATStereo_RingMountTransform"].SetMatrixTransformToParent(boxTransform.GetMatrix())
 
   def compute_ring_kinematics(self, side):
+    """This function computes the ring kinematics for the trajectory targets."""
     plan = self.trajectory_targets[side]
     if plan["ATStereo_Z_DriveTransform"] is None:
         return
@@ -1191,6 +1236,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     plan["ATStereo_Z_DriveTransform"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
   def axyzRotateSide(self, side):
+    """This function applies the axyz rotate transform to the trajectory targets."""
     plan = self.trajectory_targets[side]
 
     if plan["ATStereo_Y_DriveTransform"] is None:
@@ -1216,6 +1262,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 
   def slider_transform(self, side):
+    """This function applies the slider transform to the trajectory targets."""
     plan = self.trajectory_targets[side]
     if plan["ATStereo_Y_DriveTransform"] is None or plan["ATStereo_X_DriveTransform"] is None:
         return
@@ -1259,6 +1306,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     plan["ATStereo_Y_DriveTransform"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
     
   def applyPlanTransform(self, side):
+    """This function applies the plan transform to the trajectory targets."""
     plan = self.trajectory_targets[side]
     result = plan["result"]
 
@@ -1332,9 +1380,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if self.frameModel is not None:
       self.frameModel.GetDisplayNode().SetVisibility(1-self.frameModel.GetDisplayVisibility())
 
-  def realTimeTrac(self):
-    self.realTimeVis = not self.realTimeVis
-
   def lockPlan(self):
     for side in ["left", "right"]:
         target = self.trajectory_targets[side]["target"]
@@ -1348,6 +1393,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
   # Data probe - capture mouse move on 3D view
   def setupDataProbecoordinates(self, x, y, z):
+    """This function calculates the coordinates of the data probe in the local coordinate system of the left and right trajectories."""
     left_iso = self.trajectory_targets["left"]["isocenter"]
     right_iso = self.trajectory_targets["right"]["isocenter"]
     
@@ -1439,101 +1485,109 @@ class track:
     def __init__(self, parent=None):
        pass
 
-
-    def startTrack(self,volumeNode,trackPointNode):
-
-        trackPoint= trackPointNode
-
-        num_fiducials = trackPoint.GetNumberOfControlPoints()
-
-        rass=[]
+    def startTrack(self, volumeNode, trackPointNode):
+        """
+        Main entry point for fiducial tracking. 
+        Detects the physical boundary of the fiducial and applies a calibrated 1mm physical gap.
+        """
+        num_fiducials = trackPointNode.GetNumberOfControlPoints()
+        rass = []
 
         for i in range(num_fiducials):
-           ras = trackPoint.GetNthControlPointPosition(i)
-
-           ijk=self.RAS2IJK(volumeNode,ras)
-
-           ras=self.trackLogic(volumeNode,ijk[0],ijk[1])
-           rass.append(ras)
+           ras = trackPointNode.GetNthControlPointPosition(i)
+           ijk = self.RAS2IJK(volumeNode, ras)
+           peak_ras = self.track3DPeak(volumeNode, ijk)
+           rass.append(peak_ras)
 
         return rass
 
-
-    def trackLogic(self,volumeNode=None,i=None,j=None):
-
-        search_radius=8
-
-        k,off=self.getIndex()
-
-        ori_array  = slicer.util.array(volumeNode.GetID())
-
-        ks=ori_array.shape[0]-k
- 
-        center_x = i 
-        center_y = j 
-
-        for i in range(ks):
-            index = k + i
-            img = ori_array[index, :, :]
-
-            y_min = int(max(0, center_y - search_radius))
-            y_max = int(min(img.shape[0], center_y + search_radius))
-            x_min = int(max(0, center_x - search_radius))
-            x_max = int(min(img.shape[1], center_x + search_radius))
-
-            roi = img[y_min:y_max, x_min:x_max]
-            maxVal = np.max(roi)
-            maxLoc = np.unravel_index(np.argmax(roi), roi.shape) 
-
-            if maxVal <400:
-              break
-
-            center_x = x_min + maxLoc[1]
-            center_y = y_min + maxLoc[0]
-
-            cor=[center_x, center_y,index]
-            ras=self.IJK2RAS(volumeNode,cor)
-
-        if ras is None:
-          raise ValueError("trackLogic failed: ras was never computed")
-            
-        return ras
-
-    
-    def IJK2RAS(self,VolumeNode,ijk):
+    def track3DPeak(self, volumeNode, start_ijk):
+        """
+        3D Columnar Peak Detection. Extracts a vertical 3D block above the starting point, thresholds it, 
+        and calculates the centroid of the voxels at the maximum Z (k) index.
+        """
+        search_radius = 8
+        threshold = 400
         
+        start_i, start_j, start_k = start_ijk
+        start_i = int(start_i)
+        start_j = int(start_j)
+        start_k = int(start_k)
+
+        volume_array = slicer.util.array(volumeNode.GetID())
+        k_max, j_max, i_max = volume_array.shape
+        
+        # Define 3D ROI bounds (extending upwards from start_k)
+        i_min = max(0, start_i - search_radius)
+        i_stop = min(i_max, start_i + search_radius + 1)
+        j_min = max(0, start_j - search_radius)
+        j_stop = min(j_max, start_j + search_radius + 1)
+        k_min = max(0, start_k)
+        k_stop = k_max
+        
+        if k_min >= k_stop:
+            return self.IJK2RAS(volumeNode, start_ijk)
+            
+        roi = volume_array[k_min:k_stop, j_min:j_stop, i_min:i_stop]
+        
+        # Find voxels above threshold
+        mask = roi >= threshold
+        if not np.any(mask):
+            return self.IJK2RAS(volumeNode, start_ijk)
+            
+        # Get coordinates of all valid voxels within the ROI
+        z, y, x = np.where(mask)
+        
+        # The peak is the highest Z-coordinate (which corresponds to largest k offset)
+        highest_z_offset = np.max(z)
+        
+        # Find the centroid of the voxels at this peak Z level for sub-voxel accuracy
+        highest_z_mask = (z == highest_z_offset)
+        peak_y_offsets = y[highest_z_mask]
+        peak_x_offsets = x[highest_z_mask]
+        
+        # Voxel coordinates of the boundary
+        peak_x = i_min + np.mean(peak_x_offsets)
+        peak_y = j_min + np.mean(peak_y_offsets)
+        peak_z = k_min + highest_z_offset
+        
+        # Convert boundary to RAS
+        peak_ijk = [peak_x, peak_y, peak_z]
+        boundary_ras = self.IJK2RAS(volumeNode, peak_ijk)
+        
+        # Determine physical direction of the k-axis (upward)
+        peak_ijk_up = [peak_x, peak_y, peak_z + 1.0]
+        boundary_ras_up = self.IJK2RAS(volumeNode, peak_ijk_up)
+        
+        import math
+        dir_vector = [
+            boundary_ras_up[0] - boundary_ras[0],
+            boundary_ras_up[1] - boundary_ras[1],
+            boundary_ras_up[2] - boundary_ras[2]
+        ]
+        magnitude = math.sqrt(dir_vector[0]**2 + dir_vector[1]**2 + dir_vector[2]**2)
+        
+        if magnitude > 0:
+            norm_vector = [dir_vector[0]/magnitude, dir_vector[1]/magnitude, dir_vector[2]/magnitude]
+            # Offset by precisely 1.0 mm
+            boundary_ras[0] += norm_vector[0] * 1.0
+            boundary_ras[1] += norm_vector[1] * 1.0
+            boundary_ras[2] += norm_vector[2] * 1.0
+            
+        return boundary_ras
+
+    def IJK2RAS(self, VolumeNode, ijk):
         ijk2ras = vtk.vtkMatrix4x4()
         VolumeNode.GetIJKToRASMatrix(ijk2ras)
 
-        ijk_p=np.array([ijk[0], ijk[1], ijk[2]] + [1.0])
-        
-        ras_point =ijk2ras.MultiplyFloatPoint(ijk_p)
+        ijk_p = np.array([ijk[0], ijk[1], ijk[2], 1.0])
+        ras_point = ijk2ras.MultiplyFloatPoint(ijk_p)
         return ras_point[:3]
     
-    def RAS2IJK(self,VolumeNode,ras):
+    def RAS2IJK(self, VolumeNode, ras):
         rasToijk = vtk.vtkMatrix4x4()
         VolumeNode.GetRASToIJKMatrix(rasToijk)
 
         ras_p = np.array([ras[0], ras[1], ras[2], 1.0])
-        ijk_point =np.round(rasToijk.MultiplyFloatPoint(ras_p))
-        
+        ijk_point = np.round(rasToijk.MultiplyFloatPoint(ras_p))
         return ijk_point[:3]
-
-    def getIndex(self):
-
-        red_logic = slicer.app.layoutManager().sliceWidget("Red").sliceLogic()
-        offset=red_logic.GetSliceOffset()
-        k=red_logic.GetSliceIndexFromOffset(offset)-1
-        return k,offset
-
-
-    def jumpTok(self,offset=0):
-        red_logic = slicer.app.layoutManager().sliceWidget("Red").sliceLogic()
-        red_logic.SetSliceOffset(offset)
-
-    def otherInfo(volumeNode):
-        ScalarRange= volumeNode.GetImageData().GetScalarRange()
-        Bounds=volumeNode.GetImageData().GetBounds()
-        Center=volumeNode.GetImageData().GetCenter()
-        Dimensions=volumeNode.GetImageData().GetDimensions()
-        DirectionMatrix=volumeNode.GetImageData().GetDirectionMatrix()
