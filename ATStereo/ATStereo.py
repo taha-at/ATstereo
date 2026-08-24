@@ -61,7 +61,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.ctDataSelector.setMRMLScene(slicer.mrmlScene)
     self.ui.btn_clear.connect('clicked(bool)', self.reset)
     
-    self.ui.registerFrameButton.connect('clicked(bool)', self.onRegisterFrameClicked)
     #transform - per-side arc angle and ring sliders
     self.ui.leftArcSlicer.valueChanged.connect(lambda: self.compute_arc_kinematics("left"))
     self.ui.leftRingSlicer.valueChanged.connect(lambda: self.compute_ring_kinematics("left"))
@@ -579,6 +578,21 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     rms_error = round(math.sqrt(total_squared_error / num_points), 2)
     self.ui.errortext.setText(str(rms_error))
+    # --- CSV LOGGING ---
+    import csv, datetime, os
+    csv_path = "/Users/abdelrahmantaha/Desktop/ATStereo_Phase1_RMSE.csv"
+    file_exists = os.path.isfile(csv_path)
+    try:
+        with open(csv_path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            if not file_exists:
+                writer.writerow(["Timestamp", "RMSE", "Points_Used"])
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writer.writerow([timestamp, rms_error, num_points])
+            print(f"Logged Isocenter RMSE: {rms_error} to {csv_path}")
+    except Exception as e:
+        print(f"Failed to log RMSE to CSV: {e}")
+    # -------------------
     
     # 6. Reset views
     layoutManager = slicer.app.layoutManager()
@@ -1161,8 +1175,27 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.app.restoreOverrideCursor()
 
   def loadTestCt(self):
-    """This function loads the test CT data."""
-    ctPath=self.resourcePath('ctData/Test.nrrd')
+    """This function loads the test CT data, auto-downloading it if missing."""
+    import os
+    import urllib.request
+    
+    ctPath = self.resourcePath('ctData/Test.nrrd')
+    
+    # If file doesn't exist, or is just a small LFS text pointer (< 1 MB)
+    if not os.path.exists(ctPath) or os.path.getsize(ctPath) < 1000000:
+        slicer.util.showStatusMessage("Downloading Test CT Scan (~82 MB)... Please wait, Slicer will freeze during download.", 10000)
+        slicer.app.processEvents() # Force the UI to show the message
+        
+        url = "https://github.com/taha-at/ATstereo/raw/main/ATStereo/Resources/ctData/Test.nrrd"
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(ctPath), exist_ok=True)
+            urllib.request.urlretrieve(url, ctPath)
+            slicer.util.showStatusMessage("Download complete!", 3000)
+        except Exception as e:
+            slicer.util.errorDisplay(f"Failed to download Test CT. \nError: {e}\n\nYou can manually download it from:\n{url}")
+            return
+
     node = slicer.util.loadVolume(ctPath)
     if node:
         slicer.modules.volumes.logic().CenterVolume(node)
