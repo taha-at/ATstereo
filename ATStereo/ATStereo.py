@@ -98,8 +98,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.sc=stereoLogic()
     self.sc.initTube()
 
-    self.track=track()
-
     #self.initialize_coordinate_table()
 
     # Setup 3D view mouse move observer for data probe
@@ -111,11 +109,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     
     self.interactor.AddObserver('MouseMoveEvent', self.onMouseMove)
     self.onVolumeChanged()
-
-  def onRegisterFrameClicked(self):
-      """Triggered by the UI registerFrameButton to run tracking and register."""
-      self.autodetect_frame_markers()
-      slicer.util.showStatusMessage("Frame registered and RMSE logged!", 3000)
 
   def cleanup(self):
     self.removeObservers()
@@ -245,53 +238,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         table.horizontalHeader().setSectionResizeMode(4, 2)
         table.horizontalHeader().setSectionResizeMode(5, 2)
 
-  def render_theoretical_fiducials(self,points): # show standard points
-
-    self.theoretical_fiducials = slicer.mrmlScene.GetFirstNodeByName("S")
-    if (self.theoretical_fiducials is None):
-      self.theoretical_fiducials = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "S")
-    self.theoretical_fiducials.RemoveAllControlPoints()
-
-    self.theoretical_fiducials.SetLocked(1)
-     
-    display_node = self.theoretical_fiducials.GetDisplayNode()
-    display_node.SetGlyphType(5)
-    display_node.SetTextScale(3)
-    
-    for i in points:
-      self.theoretical_fiducials.AddFiducial(i[0],i[1],i[2])
-
-    #rename 4 points
-    name=["A  ","B  ","C  ","D  "]
-
-    for i in range(4):
-      self.theoretical_fiducials.SetNthControlPointLabel(i, name[i])
-
-  def on_select_registration_markers(self):#select 4 points
-    self.max2D()
-    self.registration_markers= slicer.mrmlScene.GetFirstNodeByName("pointset")
-    if(self.registration_markers is None):
-        #slicer.app.layoutManager().threeDWidget(0).threeDView().lookFromAxis(3)
-        self.registration_markers= slicer.mrmlScene.AddNewNodeByClass("vtkMRMLMarkupsFiducialNode", "pointset")
-        self.registration_markers.RemoveAllControlPoints()
-
-    self.registration_markers.GetDisplayNode().SetGlyphType(2)
-    
-    self.registration_markers.RemoveAllObservers()
-    self.registration_markers.AddObserver(
-    slicer.vtkMRMLMarkupsNode.PointAddedEvent,
-    functools.partial(self.on_four_point_added, actor="f"))
-
-    interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-    selectionNode = slicer.app.applicationLogic().GetSelectionNode()
-    selectionNode.SetActivePlaceNodeID(self.registration_markers.GetID())
-    placeModePersistence = 1
-    interactionNode.SetPlaceModePersistence(placeModePersistence)
-    interactionNode.SetCurrentInteractionMode(interactionNode.Place)
-   
-    pointListDisplayNode = self.registration_markers.GetDisplayNode()
-    pointListDisplayNode.SetSelectedColor(1,1,0)
-
 
   def max2D(self):
     layoutManager = slicer.app.layoutManager()
@@ -299,189 +245,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     redSliceCompositeNode = slicer.mrmlScene.GetNodeByID("vtkMRMLSliceCompositeNodeRed")
     if redSliceCompositeNode:
         redSliceCompositeNode.SetBackgroundVolumeID(redSliceCompositeNode.GetBackgroundVolumeID())
-  
-  def identify_superior_fiducials(self):
-
-    layoutManager = slicer.app.layoutManager()
-    layoutManager.setLayout(slicer.vtkMRMLLayoutNode.SlicerLayoutFourUpView)
 
 
-  def comStandLocation(self):#print 4s tandard points position
-    standardList=[]
-    width=int(self.ui.widthEdit.text)
-    height=int(self.ui.heightEdit.text)
-    
-    To1=[-width/2,height/2,height/2]
-    To2=[width/2,height/2,height/2]
-    To3=[width/2,-height/2,height/2]
-    To4=[-width/2,-height/2,height/2]
 
-    standardList.append(To1)
-    standardList.append(To2)
-    standardList.append(To3)
-    standardList.append(To4)
 
-    return standardList
-  
-  def sort_fiducials_anatomically(self, vtkpoints):
-    # Retrieve points into a numpy array for vector operations
-    pts = []
-    for i in range(4):
-        p = [0, 0, 0]
-        vtkpoints.GetPoint(i, p)
-        pts.append(np.array(p))
 
-    # Calculate the spatial centroid of the 4 markers
-    centroid = np.mean(pts, axis=0)
-    
-    # Classify each point into anatomical quadrants relative to the centroid
-    # RAS Coordinate System: +X is Right, -X is Left. +Y is Anterior, -Y is Posterior.
-    sorted_pts = [None] * 4
-    for p in pts:
-        is_right = p[0] > centroid[0]
-        is_anterior = p[1] > centroid[1]
-
-        if not is_right and is_anterior:
-            sorted_pts[0] = p  # Left-Anterior
-        elif is_right and is_anterior:
-            sorted_pts[1] = p  # Right-Anterior
-        elif is_right and not is_anterior:
-            sorted_pts[2] = p  # Right-Posterior
-        elif not is_right and not is_anterior:
-            sorted_pts[3] = p  # Left-Posterior
-
-    # Construct the ordered vtkPoints object and a native python list
-    from_points_vtk = vtk.vtkPoints()
-    sorted_pts_list = []
-    
-    for point in sorted_pts:
-        if point is not None:
-            pt_list = point.tolist()
-            from_points_vtk.InsertNextPoint(pt_list)
-            sorted_pts_list.append(pt_list)
-        else:
-            # Fallback in case of highly skewed marker placement (centroid classification fails)
-            print("Warning: Spatial quadrant classification failed, reverting to linear sort.")
-            pts.sort(key=lambda coord: (coord[0], coord[1]))
-            sorted_pts_list = [fallback_pt.tolist() for fallback_pt in pts]
-            for fallback_pt in pts:
-                from_points_vtk.InsertNextPoint(fallback_pt.tolist())
-            break
-
-    return from_points_vtk, sorted_pts_list
-  
-  def autodetect_frame_markers(self):
-      if self.registration_markers is None :
-        slicer.util.messageBox("Please Select 4 Points")
-        return
-      n = self.registration_markers.GetNumberOfControlPoints()
-      if n != 4:
-        slicer.util.messageBox("Please Select 4 Points")
-        return
-      
-      leksell = self.ui.ctDataSelector.currentNode()
-      rass=self.track.startTrack(leksell,self.registration_markers)
-      for i in range(4):
-         self.registration_markers.SetNthControlPointPosition(i,rass[i])
-
-      self.execute_rigid_registration()
          
-  def execute_rigid_registration(self):#to register
-    self.identify_superior_fiducials()
-
-    stan=self.comStandLocation() 
-
-    self.render_theoretical_fiducials(stan) 
-
-    if self.registration_markers is None :
-      slicer.util.messageBox("Please Select 4 Points")
-      return
-    n = self.registration_markers.GetNumberOfControlPoints()
-    if n != 4:
-      slicer.util.messageBox("Please Select 4 Points")
-      return
-
-    fromPointsOrdered = vtk.vtkPoints()
-    toPointsOrdered = vtk.vtkPoints()
-
-    for i in range(4):
-      ras = vtk.vtkVector3d(0,0,0)
-      self.registration_markers.GetNthControlPointPositionWorld(i,ras)
-      fromPointsOrdered.InsertPoint(i, ras)
-      toPointsOrdered.InsertPoint(i, stan[i])
-
-    P = np.array([fromPointsOrdered.GetPoint(i) for i in range(4)]) 
-    Q = np.array([toPointsOrdered.GetPoint(i) for i in range(4)])  
-    #calculatedTransform =self.sc.kabsch(P,Q)
-
-    landmarkTransform = vtk.vtkLandmarkTransform()
-    landmarkTransform.SetSourceLandmarks(fromPointsOrdered)
-    landmarkTransform.SetTargetLandmarks(toPointsOrdered)
-    landmarkTransform.SetModeToRigidBody()
-    landmarkTransform.Update()
-    calculatedTransform = vtk.vtkMatrix4x4()
-    landmarkTransform.GetMatrix(calculatedTransform)
-
-    self.outputTransformNode = slicer.mrmlScene.GetFirstNodeByName("ATStereo_RegistrationTransform")
-    if(self.outputTransformNode is None):
-      self.outputTransformNode = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLTransformNode", "ATStereo_RegistrationTransform")
-    self.outputTransformNode.SetMatrixTransformToParent(calculatedTransform)
-    self.registration_markers.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
-
-    leksell = self.ui.ctDataSelector.currentNode()
-    if leksell:
-      leksell.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
-
-    layoutManager = slicer.app.layoutManager()
-    threeDWidget = layoutManager.threeDWidget(0) 
-    threeDView = threeDWidget.threeDView()
-    threeDView.resetFocalPoint() 
-    slicer.util.resetSliceViews()
-    
-   
-    total_squared_error = 0.0
-    num_points = fromPointsOrdered.GetNumberOfPoints()
-
-    for i in range(num_points):
-
-        source_point = [0.0, 0.0, 0.0]
-        fromPointsOrdered.GetPoint(i, source_point)
-      
-        transformed_point = [0.0, 0.0, 0.0]
-        landmarkTransform.TransformPoint(source_point, transformed_point)
-        
-        target_point = [0.0, 0.0, 0.0]
-        toPointsOrdered.GetPoint(i, target_point)
-        
-        squared_error = (
-            (transformed_point[0] - target_point[0])**2 + 
-            (transformed_point[1] - target_point[1])**2 + 
-            (transformed_point[2] - target_point[2])**2 
-        )
-        
-        total_squared_error += squared_error
-
-    rms_error = round(math.sqrt(total_squared_error / num_points), 2)
-    if rms_error>1.5:
-       slicer.util.warningDisplay("The error is too large. Please re-register.", windowTitle="Warning")
-
-    self.ui.errortext.setText(str(rms_error))
-
-    # --- CSV LOGGING ---
-    import csv, datetime, os
-    csv_path = "/Users/abdelrahmantaha/Desktop/ATStereo_Phase1_RMSE.csv"
-    file_exists = os.path.isfile(csv_path)
-    try:
-        with open(csv_path, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            if not file_exists:
-                writer.writerow(["Timestamp", "RMSE", "Points_Used"])
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            writer.writerow([timestamp, rms_error, num_points])
-            print(f"Logged RMSE: {rms_error} to {csv_path}")
-    except Exception as e:
-        print(f"Failed to log RMSE to CSV: {e}")
-    # -------------------
   def on_pick_isocenters(self):
     self.max2D()
     self.isocenterPoints = slicer.mrmlScene.GetFirstNodeByName("Isocenters")
@@ -601,7 +370,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     threeDView.resetFocalPoint() 
     slicer.util.resetSliceViews()
     
-    if rms_error > 2.0:
+    if rms_error > 1.5:
         slicer.util.warningDisplay(f"The alignment error is very large (RMSE = {rms_error} mm). \nMake sure you picked the points in the EXACT order: \n1. Left Isocenter\n2. Right Isocenter\n3. Left (0,0,120)\n4. Right (0,0,120).", windowTitle="High Error Warning")
     else:
         slicer.util.messageBox(f"Alignment complete! (RMSE = {rms_error} mm)")
@@ -887,33 +656,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         slicer.util.warningDisplay("Warning: left and right trajectories are very close.")
 
         
-    ##observe 4 points
-  
-  def observeFourPoints(self):# 
-      self.registration_markers = slicer.mrmlScene.GetFirstNodeByName("pointset")
-      node=self.registration_markers
-      if node:
-        n = node.GetNumberOfControlPoints()
-        interactionNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLInteractionNode")
-        if n > 4:
-          interactionNode = slicer.app.applicationLogic().GetInteractionNode()
-          interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
-          nodeVtkPoints=vtk.vtkPoints()
-          for i in range(4):
-            ras = vtk.vtkVector3d(0,0,0)
-            node.GetNthControlPointPositionWorld(i,ras)
-            nodeVtkPoints.InsertPoint(i, ras)
-          _,nodeListPoints=self.sort_fiducials_anatomically(nodeVtkPoints)
-          node.RemoveAllControlPoints()
-          node.GetDisplayNode().SetGlyphType(2)
-          name=["    a","    b","    c","    d"]
-          for i in range(4):
-            node.AddControlPointWorld(nodeListPoints[i])
-            node.SetNthControlPointLabel(i,name[i])
 
-  def on_four_point_added(self, caller, event, actor=None):
-    self.observeFourPoints()
+
 
   def updatePlanTube(self, side):
     plan = self.trajectory_targets[side]
@@ -945,12 +690,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     plan["tubeModel"].GetDisplayNode().SetOpacity(0.5)
 
 
-  def observerStartMove(self, caller, event):
-    for side in ["left", "right"]:
-        tube = self.trajectory_targets[side]["tubeModel"]
-        if tube is not None:
-            tube.GetDisplayNode().SetVisibility(0)
- 
+
+
   def observerEndMove(self, caller, event):
     for side in ["left", "right"]:
         tube = self.trajectory_targets[side]["tubeModel"]
@@ -1025,6 +766,25 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 #######################################################################################  For Simulation
   def loadFrame(self):
+    if hasattr(self, 'workflow_start_time') and self.workflow_start_time is not None:
+        import time, csv, datetime, os
+        elapsed = time.time() - self.workflow_start_time
+        slicer.util.showStatusMessage(f"Workflow completed in {elapsed:.1f} seconds!", 5000)
+        
+        csv_path = "/Users/abdelrahmantaha/Desktop/ATStereo_WorkflowTime.csv"
+        file_exists = os.path.isfile(csv_path)
+        try:
+            with open(csv_path, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                if not file_exists:
+                    writer.writerow(["Timestamp", "Total_Time_Seconds"])
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                writer.writerow([timestamp, round(elapsed, 1)])
+        except Exception as e:
+            print(f"Failed to log time: {e}")
+        
+        self.workflow_start_time = None
+
     if self.frameModel is None:
         self.frameModel = slicer.util.loadModel(self.resourcePath('frame/Frame.stl'))
         self.frameModel.GetDisplayNode().SetColor(1, 238/255, 0)
@@ -1215,14 +975,8 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     t.Translate(-px, -py, -pz)
     return t
 
-  def _ringPivotTransform(self, side, ring_value):
-    """Create a transform that rotates around the side's isocenter by ring_value degrees (X axis)."""
-    px, py, pz = self.trajectory_targets[side]["isocenter"]
-    t = vtk.vtkTransform()
-    t.Translate(px, py, pz)
-    t.RotateX(360-ring_value)
-    t.Translate(-px, -py, -pz)
-    return t
+
+
 
   def compute_arc_kinematics(self, side):
     """This function computes the arc kinematics for the trajectory targets."""
@@ -1268,30 +1022,7 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     arcTransform.Translate(-px, -py, -pz)
     plan["ATStereo_Z_DriveTransform"].SetMatrixTransformToParent(arcTransform.GetMatrix())
 
-  def axyzRotateSide(self, side):
-    """This function applies the axyz rotate transform to the trajectory targets."""
-    plan = self.trajectory_targets[side]
 
-    if plan["ATStereo_Y_DriveTransform"] is None:
-        return
-    if plan["basePosition"] is None:
-        return
-
-    if side == "left":
-        x = self.ui.leftLocalXSlicer.value
-        y = self.ui.leftLocalYSlicer.value
-        z = self.ui.leftLocalZSlicer.value
-    else:
-        x = self.ui.rightLocalXSlicer.value
-        y = self.ui.rightLocalYSlicer.value
-        z = self.ui.rightLocalZSlicer.value
-
-    gx, gy, gz = self.localToGlobal(side, x, y, z)
-    baseX, baseY, baseZ = plan["basePosition"]
-
-    sliderTransform = vtk.vtkTransform()
-    sliderTransform.Translate(0, gy - baseY, 0)
-    plan["ATStereo_Y_DriveTransform"].SetMatrixTransformToParent(sliderTransform.GetMatrix())
 
 
   def slider_transform(self, side):
@@ -1505,122 +1236,12 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
         self.ui.showBtn.setText("Show 3D")
         return
 
+    import time
+    self.workflow_start_time = time.time()
+
     volRenLogic = slicer.modules.volumerendering.logic()
     displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(currentNode)
     if displayNode and displayNode.GetVisibility():
         self.ui.showBtn.setText("Hide 3D")
     else:
         self.ui.showBtn.setText("Show 3D")
-
-
-class track:
-
-    def __init__(self, parent=None):
-       pass
-
-    def startTrack(self, volumeNode, trackPointNode):
-        """
-        Main entry point for fiducial tracking. 
-        Detects the physical boundary of the fiducial and applies a calibrated 1mm physical gap.
-        """
-        num_fiducials = trackPointNode.GetNumberOfControlPoints()
-        rass = []
-
-        for i in range(num_fiducials):
-           ras = trackPointNode.GetNthControlPointPosition(i)
-           ijk = self.RAS2IJK(volumeNode, ras)
-           peak_ras = self.track3DPeak(volumeNode, ijk)
-           rass.append(peak_ras)
-
-        return rass
-
-    def track3DPeak(self, volumeNode, start_ijk):
-        """
-        3D Columnar Peak Detection. Extracts a vertical 3D block above the starting point, thresholds it, 
-        and calculates the centroid of the voxels at the maximum Z (k) index.
-        """
-        search_radius = 8
-        threshold = 400
-        
-        start_i, start_j, start_k = start_ijk
-        start_i = int(start_i)
-        start_j = int(start_j)
-        start_k = int(start_k)
-
-        volume_array = slicer.util.array(volumeNode.GetID())
-        k_max, j_max, i_max = volume_array.shape
-        
-        # Define 3D ROI bounds (extending upwards from start_k)
-        i_min = max(0, start_i - search_radius)
-        i_stop = min(i_max, start_i + search_radius + 1)
-        j_min = max(0, start_j - search_radius)
-        j_stop = min(j_max, start_j + search_radius + 1)
-        k_min = max(0, start_k)
-        k_stop = k_max
-        
-        if k_min >= k_stop:
-            return self.IJK2RAS(volumeNode, start_ijk)
-            
-        roi = volume_array[k_min:k_stop, j_min:j_stop, i_min:i_stop]
-        
-        # Find voxels above threshold
-        mask = roi >= threshold
-        if not np.any(mask):
-            return self.IJK2RAS(volumeNode, start_ijk)
-            
-        # Get coordinates of all valid voxels within the ROI
-        z, y, x = np.where(mask)
-        
-        # The peak is the highest Z-coordinate (which corresponds to largest k offset)
-        highest_z_offset = np.max(z)
-        
-        # Find the centroid of the voxels at this peak Z level for sub-voxel accuracy
-        highest_z_mask = (z == highest_z_offset)
-        peak_y_offsets = y[highest_z_mask]
-        peak_x_offsets = x[highest_z_mask]
-        
-        # Voxel coordinates of the boundary
-        peak_x = i_min + np.mean(peak_x_offsets)
-        peak_y = j_min + np.mean(peak_y_offsets)
-        peak_z = k_min + highest_z_offset
-        
-        # Convert boundary to RAS
-        peak_ijk = [peak_x, peak_y, peak_z]
-        boundary_ras = self.IJK2RAS(volumeNode, peak_ijk)
-        
-        # Determine physical direction of the k-axis (upward)
-        peak_ijk_up = [peak_x, peak_y, peak_z + 1.0]
-        boundary_ras_up = self.IJK2RAS(volumeNode, peak_ijk_up)
-        
-        import math
-        dir_vector = [
-            boundary_ras_up[0] - boundary_ras[0],
-            boundary_ras_up[1] - boundary_ras[1],
-            boundary_ras_up[2] - boundary_ras[2]
-        ]
-        magnitude = math.sqrt(dir_vector[0]**2 + dir_vector[1]**2 + dir_vector[2]**2)
-        
-        if magnitude > 0:
-            norm_vector = [dir_vector[0]/magnitude, dir_vector[1]/magnitude, dir_vector[2]/magnitude]
-            # Offset by precisely 1.0 mm
-            boundary_ras[0] += norm_vector[0] * 1.0
-            boundary_ras[1] += norm_vector[1] * 1.0
-            boundary_ras[2] += norm_vector[2] * 1.0
-            
-        return boundary_ras
-
-    def IJK2RAS(self, VolumeNode, ijk):
-        ijk2ras = vtk.vtkMatrix4x4()
-        VolumeNode.GetIJKToRASMatrix(ijk2ras)
-
-        ijk_p = np.array([ijk[0], ijk[1], ijk[2], 1.0])
-        ras_point = ijk2ras.MultiplyFloatPoint(ijk_p)
-        return ras_point[:3]
-    
-    def RAS2IJK(self, VolumeNode, ras):
-        rasToijk = vtk.vtkMatrix4x4()
-        VolumeNode.GetRASToIJKMatrix(rasToijk)
-
-        ras_p = np.array([ras[0], ras[1], ras[2], 1.0])
-        ijk_point = np.round(rasToijk.MultiplyFloatPoint(ras_p))
-        return ijk_point[:3]
