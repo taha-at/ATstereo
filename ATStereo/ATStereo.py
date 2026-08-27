@@ -155,7 +155,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.frameModel = None
     self.sliderVis = False
     
-    self.pointNodeObservers = []
     self.trajectory_targets = {
         "left": {
             "target": None,
@@ -212,6 +211,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     node.RemoveAllControlPoints()
     node.GetDisplayNode().SetGlyphType(6)
     node.GetDisplayNode().SetGlyphSize(10)
+    
+    node.RemoveAllObservers()
+
     node.AddObserver(
         slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
         functools.partial(self.on_plan_point_modified, actor=actorTag)
@@ -246,10 +248,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if redSliceCompositeNode:
         redSliceCompositeNode.SetBackgroundVolumeID(redSliceCompositeNode.GetBackgroundVolumeID())
 
-
-
-
-
          
   def on_pick_isocenters(self):
     self.max2D()
@@ -261,12 +259,28 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.isocenterPoints.GetDisplayNode().SetGlyphType(6) # Star
     self.isocenterPoints.GetDisplayNode().SetSelectedColor(0, 1, 1) # Cyan
 
+    # Prevent placing more than 4 points
+    if hasattr(self, "_isocenterPointAddedObserverTag"):
+        self.isocenterPoints.RemoveObserver(self._isocenterPointAddedObserverTag)
+
+    self._isocenterPointAddedObserverTag = self.isocenterPoints.AddObserver(
+        slicer.vtkMRMLMarkupsNode.PointAddedEvent,
+        self.onIsocenterPointAdded
+    )
+
     interactionNode = slicer.app.applicationLogic().GetInteractionNode()
     selectionNode = slicer.app.applicationLogic().GetSelectionNode()
     selectionNode.SetActivePlaceNodeID(self.isocenterPoints.GetID())
     interactionNode.SetPlaceModePersistence(1)
     interactionNode.SetCurrentInteractionMode(interactionNode.Place)
     slicer.util.messageBox("Please place exactly 4 points: \n1. Left Isocenter\n2. Right Isocenter\n3. Left point at (0,0,120)\n4. Right point at (0,0,120)")
+
+
+  def onIsocenterPointAdded(self, caller, event):
+    if self.isocenterPoints.GetNumberOfControlPoints() > 4:
+        interactionNode = slicer.app.applicationLogic().GetInteractionNode()
+        interactionNode.SetPlaceModePersistence(0)
+        interactionNode.SetCurrentInteractionMode(interactionNode.ViewTransform)
 
   def on_align_isocenters(self):
     if self.isocenterPoints is None or self.isocenterPoints.GetNumberOfControlPoints() < 4:
@@ -320,9 +334,9 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     self.isocenterPoints.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
 
-    leksell = self.ui.ctDataSelector.currentNode()
-    if leksell:
-      leksell.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
+    ctVolumeNode = self.ui.ctDataSelector.currentNode()
+    if ctVolumeNode:
+      ctVolumeNode.SetAndObserveTransformNodeID(self.outputTransformNode.GetID())
 
     # 5. Compute and Display RMS Error
     total_squared_error = 0.0
