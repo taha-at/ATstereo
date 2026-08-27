@@ -33,7 +33,7 @@ class ATStereo(ScriptedLoadableModule):
     self.parent.contributors = ["taha-at"]  
     self.parent.helpText = """
     <b>ATStereo</b><br>
-    https://github.com/taha-at/ATstereo<br><br>
+    https://github.com/taha-at/ATStereo<br><br>
     <b>NOTICE:</b> The frame geometry is patented. This software is restricted to 
     academic and non-commercial research use only. Commercial use is prohibited.
     """
@@ -211,8 +211,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     node.RemoveAllControlPoints()
     node.GetDisplayNode().SetGlyphType(6)
     node.GetDisplayNode().SetGlyphSize(10)
-    
-    node.RemoveAllObservers()
 
     node.AddObserver(
         slicer.vtkMRMLMarkupsNode.PointModifiedEvent,
