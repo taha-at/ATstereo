@@ -90,7 +90,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     self.ui.btn_importFiles.connect('clicked(bool)', self.onImportFiles)
     self.ui.btn_importFolder.connect('clicked(bool)', self.onImportFolder)
 
-    
 
     self.defineiVar()
 
@@ -359,21 +358,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
     rms_error = round(math.sqrt(total_squared_error / num_points), 2)
     self.ui.errortext.setText(str(rms_error))
-    # --- CSV LOGGING ---
-    import csv, datetime, os
-    csv_path = "/Users/abdelrahmantaha/Desktop/ATStereo_Phase1_RMSE.csv"
-    file_exists = os.path.isfile(csv_path)
-    try:
-        with open(csv_path, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            if not file_exists:
-                writer.writerow(["Timestamp", "RMSE", "Points_Used"])
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            writer.writerow([timestamp, rms_error, num_points])
-            print(f"Logged Isocenter RMSE: {rms_error} to {csv_path}")
-    except Exception as e:
-        print(f"Failed to log RMSE to CSV: {e}")
-    # -------------------
     
     # 6. Reset views
     layoutManager = slicer.app.layoutManager()
@@ -778,25 +762,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
 
 #######################################################################################  For Simulation
   def loadFrame(self):
-    if hasattr(self, 'workflow_start_time') and self.workflow_start_time is not None:
-        import time, csv, datetime, os
-        elapsed = time.time() - self.workflow_start_time
-        slicer.util.showStatusMessage(f"Workflow completed in {elapsed:.1f} seconds!", 5000)
-        
-        csv_path = "/Users/abdelrahmantaha/Desktop/ATStereo_WorkflowTime.csv"
-        file_exists = os.path.isfile(csv_path)
-        try:
-            with open(csv_path, mode='a', newline='') as file:
-                writer = csv.writer(file)
-                if not file_exists:
-                    writer.writerow(["Timestamp", "Total_Time_Seconds"])
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                writer.writerow([timestamp, round(elapsed, 1)])
-        except Exception as e:
-            print(f"Failed to log time: {e}")
-        
-        self.workflow_start_time = None
-
     if self.frameModel is None:
         self.frameModel = slicer.util.loadModel(self.resourcePath('frame/Frame.stl'))
         self.frameModel.GetDisplayNode().SetColor(1, 238/255, 0)
@@ -1247,10 +1212,6 @@ class ATStereoWidget(ScriptedLoadableModuleWidget, VTKObservationMixin):
     if currentNode is None or not currentNode.IsA("vtkMRMLVolumeNode"):
         self.ui.showBtn.setText("Show 3D")
         return
-
-    import time
-    self.workflow_start_time = time.time()
-
     volRenLogic = slicer.modules.volumerendering.logic()
     displayNode = volRenLogic.GetFirstVolumeRenderingDisplayNode(currentNode)
     if displayNode and displayNode.GetVisibility():
