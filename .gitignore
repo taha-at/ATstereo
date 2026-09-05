@@ -44,19 +44,6 @@ ENV/
 *.swo
 *~
 
-# LaTeX auxiliary files & Paper manuscripts
-Article_Title/
-**/Article_Title/
-*.aux
-*.bbl
-*.blg
-*.log
-*.out
-*.synctex.gz
-*.toc
-*.fls
-*.fdb_latexmk
-
 # 3D Slicer temporary / scene backup files
 *.mrml.bak
 *.mrml~
